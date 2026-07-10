@@ -1,0 +1,11 @@
+{$NGROK_DOMAIN:localhost} {
+    handle_path /terminal/* {
+        reverse_proxy terminal:7681
+    }
+    handle_path /todo/* {
+        reverse_proxy todo:3000
+    }
+    handle {
+        reverse_proxy homarr:3000
+    }
+}

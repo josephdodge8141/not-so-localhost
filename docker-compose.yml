@@ -1,0 +1,61 @@
+services:
+  caddy:
+    image: caddy:alpine
+    ports:
+      - "80:80"
+    env_file: .env
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+    restart: unless-stopped
+
+  terminal:
+    build: .
+    volumes:
+      - ~/.ssh/id_ed25519.pub:/import/id_ed25519.pub:ro
+      - terminal_data:/data
+    restart: unless-stopped
+
+  todo:
+    build: ../my-todo
+    environment:
+      DATABASE_URL: postgres://todo:todo@todo-db:5432/todo
+    depends_on:
+      todo-db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  todo-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: todo
+      POSTGRES_PASSWORD: todo
+      POSTGRES_DB: todo
+    volumes:
+      - todo_pgdata:/var/lib/postgresql/data
+      - ../my-todo/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U todo"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  homarr:
+    image: ghcr.io/homarr-labs/homarr:latest
+    volumes:
+      - ./homarr/appdata:/appdata
+    environment:
+      - DISABLE_ANALYTICS=true
+    restart: unless-stopped
+
+  ngrok:
+    image: ngrok/ngrok:latest
+    command: http --url=${NGROK_DOMAIN} http://caddy:80
+    environment:
+      NGROK_AUTHTOKEN: ${NGROK_AUTHTOKEN}
+    depends_on:
+      - caddy
+    restart: unless-stopped
+
+volumes:
+  terminal_data:
+  todo_pgdata:

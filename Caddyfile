@@ -1,10 +1,25 @@
-{$NGROK_DOMAIN:localhost} {
-    handle_path /terminal/* {
-        reverse_proxy terminal:7681
+http://localhost, https://localhost:443 {
+    tls internal
+    @todo {
+        path /todo /todo/*
     }
-    handle_path /todo/* {
+    handle @todo {
         reverse_proxy todo:3000
     }
+
+    handle {
+        reverse_proxy homarr:3000
+    }
+}
+
+:80 {
+    @todo {
+        path /todo /todo/*
+    }
+    handle @todo {
+        reverse_proxy todo:3000
+    }
+
     handle {
         reverse_proxy homarr:3000
     }

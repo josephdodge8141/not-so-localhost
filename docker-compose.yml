@@ -3,7 +3,7 @@ services:
     image: caddy:alpine
     ports:
       - "80:80"
-    env_file: .env
+      - "443:443"
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
     restart: unless-stopped
@@ -12,6 +12,7 @@ services:
     build: .
     volumes:
       - ~/.ssh/id_ed25519.pub:/import/id_ed25519.pub:ro
+      - ./ttyd/ssh-key/id_ed25519.pub:/import/ttyd.pub:ro
       - terminal_data:/data
     restart: unless-stopped
 
@@ -41,19 +42,21 @@ services:
 
   homarr:
     image: ghcr.io/homarr-labs/homarr:latest
+    env_file: ./homarr/.env
     volumes:
       - ./homarr/appdata:/appdata
     environment:
       - DISABLE_ANALYTICS=true
     restart: unless-stopped
 
-  ngrok:
-    image: ngrok/ngrok:latest
-    command: http --url=${NGROK_DOMAIN} http://caddy:80
-    environment:
-      NGROK_AUTHTOKEN: ${NGROK_AUTHTOKEN}
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    env_file: ./cloudflared/.env
+    command: tunnel --config /etc/cloudflared/config.yml run
+    volumes:
+      - ./cloudflared:/etc/cloudflared
     depends_on:
-      - caddy
+      - terminal
     restart: unless-stopped
 
 volumes:

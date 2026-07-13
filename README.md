@@ -1,40 +1,34 @@
 # Not-So-Localhost
 
-Orchestrate local services behind a single ngrok domain. All accessible from anywhere via the same URL.
+Local services accessible anywhere via Cloudflare Tunnel.
+
+## Prerequisites
+
+- [ttyd](https://github.com/tsl0922/ttyd) — `brew install ttyd && brew services start ttyd`
+- Docker + Docker Compose
+- Cloudflare Tunnel credentials in `cloudflared/` (set up via `cloudflared tunnel login`)
 
 ## Quick Start
 
 ```bash
-cp .env.example .env   # fill in your ngrok token + domain
 docker compose up -d
 ```
 
+You also need ttyd running for remote terminal access (`brew services start ttyd`).
+
 ## Services
 
-| Path | Service |
+| Host | Service |
 |------|---------|
-| `/` | Homarr dashboard |
-| `/terminal/` | ttyd — tmux terminal (web) |
-| `/todo/` | Todo app |
-| port 2222 | dropbear SSH (on this network only) |
-
-## Register a New Service
-
-```bash
-./register.sh
-```
-
-Prompts for service name, port, path prefix, Docker image or build path, and optional host port. Edits `docker-compose.yml` and `Caddyfile`, then shows a preview before applying.
-
-The `register.sh` script also supports remote machines — enter a host:port as the source and the script prints instructions for setting up a tunnel.
+| `joedodge.dev` | Homarr dashboard |
+| `t.joedodge.dev` | ttyd — Mac shell (requires ttyd running locally) |
+| `ssh.joedodge.dev` | dropbear SSH (internal) |
 
 ## Architecture
 
 ```
-ngrok → Caddy (reverse proxy) → homarr (dashboard)
-                              → ttyd/terminal
-                              → todo (Next.js)
-                              → ... (register more)
+iPhone Safari → Cloudflare Tunnel → cloudflared (Docker) → caddy → homarr
+                                                          → ttyd (localhost:7681) → Mac shell
 ```
 
-Caddy routes by path prefix, strips the prefix before forwarding. Every service lives behind the same ngrok domain.
+ttyd runs natively on macOS (not in Docker) because macOS disables SSH Remote Login.

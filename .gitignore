@@ -1,3 +1,6 @@
 .env
+cloudflared/.env
+cloudflared/*.json
+homarr/.env
 homarr/appdata/
 */node_modules/

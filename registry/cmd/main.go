@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	_ "github.com/lib/pq"
+	"github.com/lib/pq"
 )
 
 //go:embed index.html
@@ -183,6 +183,10 @@ func listApps(db *sql.DB) http.HandlerFunc {
 			}
 			apps = append(apps, a)
 		}
+		if err := rows.Err(); err != nil {
+			http.Error(w, "db error", http.StatusInternalServerError)
+			return
+		}
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(apps)
 	}
@@ -207,6 +211,10 @@ func createApp(db *sql.DB) http.HandlerFunc {
 			http.Error(w, "app_type must be frontend, backend, or db", http.StatusBadRequest)
 			return
 		}
+		if !strings.HasPrefix(a.PathPrefix, "/") {
+			http.Error(w, "path_prefix must start with /", http.StatusBadRequest)
+			return
+		}
 		if a.Metadata == "" {
 			a.Metadata = "{}"
 		}
@@ -217,7 +225,11 @@ func createApp(db *sql.DB) http.HandlerFunc {
 			a.Name, a.Description, a.PathPrefix, a.Port, a.AppType, a.Technology, a.ContainerName, a.Metadata, a.DeviceID,
 		).Scan(&a.ID, &a.CreatedAt, &a.UpdatedAt)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			if pqErr, ok := err.(*pq.Error); ok && pqErr.Code == "23505" {
+				http.Error(w, "path_prefix already in use", http.StatusConflict)
+				return
+			}
+			http.Error(w, "internal error", http.StatusInternalServerError)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -242,6 +254,10 @@ func updateApp(db *sql.DB) http.HandlerFunc {
 			http.Error(w, "app_type must be frontend, backend, or db", http.StatusBadRequest)
 			return
 		}
+		if !strings.HasPrefix(a.PathPrefix, "/") {
+			http.Error(w, "path_prefix must start with /", http.StatusBadRequest)
+			return
+		}
 		if a.Metadata == "" {
 			a.Metadata = "{}"
 		}
@@ -255,7 +271,11 @@ func updateApp(db *sql.DB) http.HandlerFunc {
 			return
 		}
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			if pqErr, ok := err.(*pq.Error); ok && pqErr.Code == "23505" {
+				http.Error(w, "path_prefix already in use", http.StatusConflict)
+				return
+			}
+			http.Error(w, "internal error", http.StatusInternalServerError)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")

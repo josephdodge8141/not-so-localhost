@@ -158,7 +158,8 @@ function renderApps() {
   grid.innerHTML = apps.map(app => {
     const badgeClass = `badge-${app.app_type}`;
     const badgeLabel = app.app_type === 'frontend' ? 'Web' : app.app_type === 'backend' ? 'API' : 'DB';
-    const openUrl = `https://apps.joedodge.dev${app.path_prefix}`;
+    const safePrefix = escapeHtml(app.path_prefix);
+    const openUrl = `https://apps.joedodge.dev${safePrefix}`;
     let links = '';
     if (app.app_type === 'frontend') {
       links = `<a href="${openUrl}" target="_blank" class="btn btn-sm btn-primary">Open →</a>`;
@@ -168,7 +169,7 @@ function renderApps() {
     } else if (app.app_type === 'db') {
       links = `<a href="${openUrl}" target="_blank" class="btn btn-sm btn-primary">Open →</a>`;
     }
-    const tech = app.technology ? `<p><span class="label">Tech:</span> ${app.technology}</p>` : '';
+    const tech = app.technology ? `<p><span class="label">Tech:</span> ${escapeHtml(app.technology)}</p>` : '';
     const desc = app.description ? `<p>${escapeHtml(app.description)}</p>` : '';
     return `<div class="card">
       <div class="card-header">
@@ -186,7 +187,7 @@ function renderApps() {
         ${tech}
         <p><span class="label">Path:</span> <code>${escapeHtml(app.path_prefix)}</code></p>
         <p><span class="label">Port:</span> ${app.port}</p>
-        <p><span class="label">Container:</span> ${app.container_name || 'localhost'}</p>
+        <p><span class="label">Container:</span> ${escapeHtml(app.container_name) || 'localhost'}</p>
       </div>
       <div class="card-actions">
         ${links}

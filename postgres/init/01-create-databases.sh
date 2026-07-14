@@ -7,4 +7,7 @@ psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" <<-EOSQL
 
     CREATE USER keycloak WITH PASSWORD '${KEYCLOAK_DB_PASSWORD}';
     CREATE DATABASE keycloak OWNER keycloak;
+
+    CREATE USER registry WITH PASSWORD '${REGISTRY_DB_PASSWORD}';
+    CREATE DATABASE registry OWNER registry;
 EOSQL

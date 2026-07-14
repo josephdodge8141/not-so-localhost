@@ -4,3 +4,4 @@ cloudflared/*.json
 homarr/.env
 homarr/appdata/
 */node_modules/
+backup/ca-bundle.pem

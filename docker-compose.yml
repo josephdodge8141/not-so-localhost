@@ -109,6 +109,53 @@ services:
       - edge
     restart: unless-stopped
 
+  registry:
+    build: ./registry
+    environment:
+      DATABASE_URL: postgres://registry:${REGISTRY_DB_PASSWORD}@postgres:5432/registry
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - edge
+      - internal
+    restart: unless-stopped
+
+  oauth2-proxy-registry:
+    image: quay.io/oauth2-proxy/oauth2-proxy:latest
+    command: >
+      --provider=keycloak-oidc
+      --client-id=registry
+      --client-secret=${OAUTH2_CLIENT_SECRET}
+      --upstream=http://registry:7272
+      --redirect-url=https://apps.joedodge.dev/oauth2/callback
+      --oidc-issuer-url=http://keycloak:8080/realms/local
+      --login-url=https://auth.joedodge.dev/realms/local/protocol/openid-connect/auth
+      --redeem-url=http://keycloak:8080/realms/local/protocol/openid-connect/token
+      --oidc-jwks-url=http://keycloak:8080/realms/local/protocol/openid-connect/certs
+      --insecure-oidc-skip-issuer-verification
+      --skip-oidc-discovery
+      --refresh=5m
+      --cookie-secret=${OAUTH2_COOKIE_SECRET}
+      --email-domain=*
+      --http-address=0.0.0.0:4182
+    networks:
+      - edge
+    depends_on:
+      - keycloak
+    restart: unless-stopped
+
+  pgweb:
+    image: sosedoff/pgweb:latest
+    environment:
+      DATABASE_URL: postgres://admin:${POSTGRES_ADMIN_PASSWORD}@postgres:5432?sslmode=disable
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - internal
+    restart: unless-stopped
+
   todo:
     build: ../my-todo
     environment:

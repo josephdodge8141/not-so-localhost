@@ -3,9 +3,9 @@
 ## Architecture
 
 - `ttyd` runs natively on macOS (LaunchAgent) — tmux-based terminal access via browser.
-- Docker Compose stack: postgres, keycloak, oauth2-proxy (×2), caddy, terminal (for SSH), todo, homarr, cloudflared, backup.
+- Docker Compose stack: postgres, keycloak, oauth2-proxy (×3), caddy, terminal (for SSH), todo, homarr, cloudflared, backup, registry, pgweb.
 - Caddy routes by hostname, Cloudflare tunnel is a single wildcard `*.joedodge.dev` → `caddy:80`.
-- Keycloak + oauth2-proxy provide OIDC auth for `t.joedodge.dev` and `home.joedodge.dev`.
+- Keycloak + oauth2-proxy provide OIDC auth for `t.joedodge.dev`, `home.joedodge.dev`, and `apps.joedodge.dev`.
 
 ## Key Constraints
 
@@ -15,8 +15,8 @@
 
 ## Network Layout
 
-- `edge` — tunnel-facing services (caddy, keycloak, oauth2-proxy, terminal, todo, homarr, cloudflared, backup).
-- `internal` — database only (postgres, keycloak, todo, backup).
+- `edge` — tunnel-facing services (caddy, keycloak, oauth2-proxy, terminal, todo, homarr, cloudflared, backup, registry).
+- `internal` — database only (postgres, keycloak, todo, backup, registry, pgweb).
 
 ## Hostname Routing (Caddyfile)
 
@@ -26,6 +26,7 @@
 | `auth.joedodge.dev` | Keycloak (OIDC issuer) |
 | `t.joedodge.dev` | oauth2-proxy-ttyd → host.docker.internal:7681 |
 | `home.joedodge.dev` | oauth2-proxy-homarr → homarr:3000 |
+| `apps.joedodge.dev` | oauth2-proxy-registry → registry:7272 |
 | `/todo/*` | todo app (behind t.joedodge.dev auth) |
 
 ## OIDC Flow
@@ -35,7 +36,14 @@ oauth2-proxy uses `--oidc-issuer-url=http://keycloak:8080/realms/local` for serv
 ## Keycloak Config
 
 - Realm: `local`
-- Clients: `ttyd`, `homarr` (confidential, standard flow, redirect URIs match oauth2-proxy config)
+- Clients: `ttyd`, `homarr`, `registry` (confidential, standard flow, redirect URIs match oauth2-proxy config)
+- `registry` client config (manual Keycloak step):
+  - Client ID: `registry`
+  - Client protocol: openid-connect
+  - Standard flow enabled
+  - Valid redirect URIs: `https://apps.joedodge.dev/oauth2/callback`, `http://localhost:4182/oauth2/callback`
+  - Client authentication ON
+  - Client secret matches `OAUTH2_CLIENT_SECRET`
 - Users: `joe` (password: `password`)
 - Admin: `admin` (password in `.env` as `KEYCLOAK_ADMIN_PASSWORD`)
 
@@ -49,6 +57,7 @@ From personal WiFi/cellular (not corp network):
 - `t.joedodge.dev` → Keycloak login → terminal
 - `home.joedodge.dev` → Keycloak login → Homarr
 - `auth.joedodge.dev` → Keycloak admin console
+- `apps.joedodge.dev` → Keycloak login → App Registry
 - `joedodge.dev` → hello world (no auth)
 
 ## Backup Service

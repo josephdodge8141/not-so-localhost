@@ -19,6 +19,11 @@
         respond "Hello World!" 200
     }
 
+    @appstore host apps.joedodge.dev
+    handle @appstore {
+        reverse_proxy oauth2-proxy-registry:4182
+    }
+
     @todo path /todo /todo/*
     handle @todo {
         reverse_proxy todo:3000

@@ -54,6 +54,7 @@ func main() {
 	migrate(db)
 
 	pgwebProxy := httputil.NewSingleHostReverseProxy(mustURL("http://pgweb:8081"))
+	pgwebEmail := os.Getenv("PGWEB_ALLOWED_EMAIL")
 	appProxies := newAppProxyCache(db)
 
 	mux := http.NewServeMux()
@@ -65,6 +66,10 @@ func main() {
 
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasPrefix(r.URL.Path, "/pgweb") {
+			if pgwebEmail != "" && r.Header.Get("X-Forwarded-Email") != pgwebEmail {
+				http.Error(w, "forbidden", http.StatusForbidden)
+				return
+			}
 			r.URL.Path = strings.TrimPrefix(r.URL.Path, "/pgweb")
 			if r.URL.Path == "" {
 				r.URL.Path = "/"
@@ -213,6 +218,10 @@ func updateApp(db *sql.DB) http.HandlerFunc {
 			 WHERE id=$11 RETURNING id, created_at, updated_at`,
 			a.Name, a.Description, a.PathPrefix, a.Port, a.AppType, a.Technology, a.ContainerName, a.Metadata, a.DeviceID, a.Enabled, id,
 		).Scan(&a.ID, &a.CreatedAt, &a.UpdatedAt)
+		if err == sql.ErrNoRows {
+			http.Error(w, "not found", http.StatusNotFound)
+			return
+		}
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -225,9 +234,14 @@ func updateApp(db *sql.DB) http.HandlerFunc {
 func deleteApp(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id := r.PathValue("id")
-		_, err := db.Exec(`DELETE FROM apps WHERE id=$1`, id)
+		result, err := db.Exec(`DELETE FROM apps WHERE id=$1`, id)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		n, _ := result.RowsAffected()
+		if n == 0 {
+			http.Error(w, "not found", http.StatusNotFound)
 			return
 		}
 		w.WriteHeader(http.StatusNoContent)

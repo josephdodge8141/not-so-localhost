@@ -46,7 +46,7 @@ services:
     command: >
       --provider=keycloak-oidc
       --client-id=ttyd
-      --client-secret=${OAUTH2_CLIENT_SECRET}
+      --client-secret=${OAUTH2_CLIENT_SECRET_TTYD}
       --upstream=http://host.docker.internal:7681
       --redirect-url=https://t.joedodge.dev/oauth2/callback
       --oidc-issuer-url=http://keycloak:8080/realms/local
@@ -70,7 +70,7 @@ services:
     command: >
       --provider=keycloak-oidc
       --client-id=homarr
-      --client-secret=${OAUTH2_CLIENT_SECRET}
+      --client-secret=${OAUTH2_CLIENT_SECRET_HOMARR}
       --upstream=http://homarr:3000
       --redirect-url=https://home.joedodge.dev/oauth2/callback
       --oidc-issuer-url=http://keycloak:8080/realms/local
@@ -113,6 +113,7 @@ services:
     build: ./registry
     environment:
       DATABASE_URL: postgres://registry:${REGISTRY_DB_PASSWORD}@postgres:5432/registry
+      PGWEB_ALLOWED_EMAIL: ${PGWEB_ALLOWED_EMAIL}
     depends_on:
       postgres:
         condition: service_healthy
@@ -126,7 +127,7 @@ services:
     command: >
       --provider=keycloak-oidc
       --client-id=registry
-      --client-secret=${OAUTH2_CLIENT_SECRET}
+      --client-secret=${OAUTH2_CLIENT_SECRET_REGISTRY}
       --upstream=http://registry:7272
       --redirect-url=https://apps.joedodge.dev/oauth2/callback
       --oidc-issuer-url=http://keycloak:8080/realms/local

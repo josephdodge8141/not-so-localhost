@@ -66,7 +66,7 @@ func main() {
 
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasPrefix(r.URL.Path, "/pgweb") {
-			if pgwebEmail != "" && r.Header.Get("X-Forwarded-Email") != pgwebEmail {
+			if pgwebEmail == "" || r.Header.Get("X-Forwarded-Email") != pgwebEmail {
 				http.Error(w, "forbidden", http.StatusForbidden)
 				return
 			}
@@ -189,6 +189,9 @@ func createApp(db *sql.DB) http.HandlerFunc {
 			http.Error(w, "name, path_prefix, port, app_type required", http.StatusBadRequest)
 			return
 		}
+		if a.Metadata == "" {
+			a.Metadata = "{}"
+		}
 		err := db.QueryRow(
 			`INSERT INTO apps (name, description, path_prefix, port, app_type, technology, container_name, metadata, device_id)
 			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9)
@@ -212,6 +215,13 @@ func updateApp(db *sql.DB) http.HandlerFunc {
 		if err := json.NewDecoder(r.Body).Decode(&a); err != nil {
 			http.Error(w, "invalid body", http.StatusBadRequest)
 			return
+		}
+		if a.Name == "" || a.PathPrefix == "" || a.Port == 0 || a.AppType == "" {
+			http.Error(w, "name, path_prefix, port, app_type required", http.StatusBadRequest)
+			return
+		}
+		if a.Metadata == "" {
+			a.Metadata = "{}"
 		}
 		err := db.QueryRow(
 			`UPDATE apps SET name=$1, description=$2, path_prefix=$3, port=$4, app_type=$5, technology=$6, container_name=$7, metadata=$8::jsonb, device_id=$9, enabled=$10, updated_at=now()

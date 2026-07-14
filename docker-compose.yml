@@ -149,7 +149,7 @@ services:
   pgweb:
     image: sosedoff/pgweb:latest
     environment:
-      DATABASE_URL: postgres://admin:${POSTGRES_ADMIN_PASSWORD}@postgres:5432?sslmode=disable
+      DATABASE_URL: postgres://admin:${POSTGRES_ADMIN_PASSWORD}@postgres:5432/postgres?sslmode=disable
     depends_on:
       postgres:
         condition: service_healthy

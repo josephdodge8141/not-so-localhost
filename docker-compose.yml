@@ -112,7 +112,7 @@ services:
   registry:
     build: ./registry
     environment:
-      DATABASE_URL: postgres://registry:${REGISTRY_DB_PASSWORD}@postgres:5432/registry
+      DATABASE_URL: postgres://registry:${REGISTRY_DB_PASSWORD}@postgres:5432/registry?sslmode=disable
       PGWEB_ALLOWED_EMAIL: ${PGWEB_ALLOWED_EMAIL}
     depends_on:
       postgres:

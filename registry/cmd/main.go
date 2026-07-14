@@ -65,12 +65,15 @@ func main() {
 	mux.HandleFunc("DELETE /api/apps/{id}", deleteApp(db))
 
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		if strings.HasPrefix(r.URL.Path, "/pgweb") {
+		if r.URL.Path == "/pgweb" || strings.HasPrefix(r.URL.Path, "/pgweb/") {
 			if pgwebEmail == "" || r.Header.Get("X-Forwarded-Email") != pgwebEmail {
 				http.Error(w, "forbidden", http.StatusForbidden)
 				return
 			}
 			r.URL.Path = strings.TrimPrefix(r.URL.Path, "/pgweb")
+			if r.URL.RawPath != "" {
+				r.URL.RawPath = strings.TrimPrefix(r.URL.RawPath, "/pgweb")
+			}
 			if r.URL.Path == "" {
 				r.URL.Path = "/"
 			}
@@ -113,8 +116,12 @@ func (c *appProxyCache) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	err := c.db.QueryRow(
 		`SELECT container_name, port FROM apps WHERE path_prefix = $1 AND enabled = true`, prefix,
 	).Scan(&containerName, &port)
-	if err != nil {
+	if err == sql.ErrNoRows {
 		http.NotFound(w, r)
+		return
+	}
+	if err != nil {
+		http.Error(w, "service unavailable", http.StatusServiceUnavailable)
 		return
 	}
 
@@ -126,6 +133,9 @@ func (c *appProxyCache) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	proxy := httputil.NewSingleHostReverseProxy(mustURL("http://" + target))
 
 	r.URL.Path = strings.TrimPrefix(r.URL.Path, prefix)
+	if r.URL.RawPath != "" {
+		r.URL.RawPath = strings.TrimPrefix(r.URL.RawPath, prefix)
+	}
 	if r.URL.Path == "" {
 		r.URL.Path = "/"
 	}
@@ -178,6 +188,10 @@ func listApps(db *sql.DB) http.HandlerFunc {
 	}
 }
 
+func validAppType(t string) bool {
+	return t == "frontend" || t == "backend" || t == "db"
+}
+
 func createApp(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var a App
@@ -187,6 +201,10 @@ func createApp(db *sql.DB) http.HandlerFunc {
 		}
 		if a.Name == "" || a.PathPrefix == "" || a.Port == 0 || a.AppType == "" {
 			http.Error(w, "name, path_prefix, port, app_type required", http.StatusBadRequest)
+			return
+		}
+		if !validAppType(a.AppType) {
+			http.Error(w, "app_type must be frontend, backend, or db", http.StatusBadRequest)
 			return
 		}
 		if a.Metadata == "" {
@@ -218,6 +236,10 @@ func updateApp(db *sql.DB) http.HandlerFunc {
 		}
 		if a.Name == "" || a.PathPrefix == "" || a.Port == 0 || a.AppType == "" {
 			http.Error(w, "name, path_prefix, port, app_type required", http.StatusBadRequest)
+			return
+		}
+		if !validAppType(a.AppType) {
+			http.Error(w, "app_type must be frontend, backend, or db", http.StatusBadRequest)
 			return
 		}
 		if a.Metadata == "" {

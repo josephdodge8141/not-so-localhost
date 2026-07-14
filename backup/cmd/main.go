@@ -24,14 +24,14 @@ import (
 var identRe = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*$`)
 
 type Config struct {
-	DatabaseURL            string
-	RegistryURL            string
-	BackupInterval         time.Duration
-	S3Bucket               string
-	AWSRegion              string
-	KeycloakDBPassword     string
-	RegistryDBPassword     string
-	PostgresAdminPassword  string
+	DatabaseURL           string
+	RegistryURL           string
+	BackupInterval        time.Duration
+	S3Bucket              string
+	AWSRegion             string
+	KeycloakDBPassword    string
+	RegistryDBPassword    string
+	PostgresAdminPassword string
 }
 
 type DBApp struct {
@@ -44,20 +44,20 @@ type DBApp struct {
 }
 
 type BackupRecord struct {
-	DBName       string     `json:"db_name"`
-	DBUser       string     `json:"db_user"`
-	LastBackupAt *time.Time `json:"last_backup_at"`
-	LastBackupKey string   `json:"last_backup_key"`
-	BackupCount  int        `json:"backup_count"`
-	S3Prefix     string     `json:"s3_prefix"`
+	DBName        string     `json:"db_name"`
+	DBUser        string     `json:"db_user"`
+	LastBackupAt  *time.Time `json:"last_backup_at"`
+	LastBackupKey string     `json:"last_backup_key"`
+	BackupCount   int        `json:"backup_count"`
+	S3Prefix      string     `json:"s3_prefix"`
 }
 
 type Server struct {
-	cfg         Config
-	pool        *pgxpool.Pool
-	s3Client    *s3.Client
-	mu          sync.RWMutex
-	records     map[string]*BackupRecord
+	cfg      Config
+	pool     *pgxpool.Pool
+	s3Client *s3.Client
+	mu       sync.RWMutex
+	records  map[string]*BackupRecord
 	// password for hardcoded DBs by db_name
 	hardcodedPasswords map[string]string
 }
@@ -347,11 +347,11 @@ func (s *Server) backupDatabase(ctx context.Context, db DBApp) error {
 	now := time.Now()
 	prefix := fmt.Sprintf("backups/%s", dbName)
 	rec := &BackupRecord{
-		DBName:       dbName,
-		DBUser:       user,
-		LastBackupAt: &now,
+		DBName:        dbName,
+		DBUser:        user,
+		LastBackupAt:  &now,
 		LastBackupKey: key,
-		S3Prefix:     prefix,
+		S3Prefix:      prefix,
 	}
 
 	// Load existing record to get current count

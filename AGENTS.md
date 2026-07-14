@@ -73,6 +73,7 @@ docker build -t backup ./backup
 - Discovered DBs: fetched from registry API (`GET /api/apps?type=db`)
 - S3 path: `s3://<bucket>/backups/<dbname>/<timestamp>.sql.gz`
 - Interval: configurable via `BACKUP_INTERVAL` (default `1h`)
+- `POSTGRES_ADMIN_PASSWORD` must be set for the restore endpoint — it drops and recreates the target DB as the `postgres` superuser. Restore returns 500 without it.
 
 ### S3 Bucket Setup
 

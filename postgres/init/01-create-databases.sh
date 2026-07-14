@@ -1,0 +1,10 @@
+#!/bin/sh
+set -e
+
+psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" <<-EOSQL
+    CREATE USER todo WITH PASSWORD '${TODO_DB_PASSWORD}';
+    CREATE DATABASE todo OWNER todo;
+
+    CREATE USER keycloak WITH PASSWORD '${KEYCLOAK_DB_PASSWORD}';
+    CREATE DATABASE keycloak OWNER keycloak;
+EOSQL

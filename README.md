@@ -1,12 +1,13 @@
 # Not-So-Localhost
 
-Local services accessible anywhere via Cloudflare Tunnel.
+Local services accessible anywhere via Cloudflare Tunnel, with Keycloak authentication.
 
 ## Prerequisites
 
 - [ttyd](https://github.com/tsl0922/ttyd) — `brew install ttyd && brew services start ttyd`
 - Docker + Docker Compose
-- Cloudflare Tunnel credentials in `cloudflared/` (set up via `cloudflared tunnel login`)
+- Cloudflare Tunnel credentials in `cloudflared/`
+- Copy `.env.example` to `.env` and fill in secrets
 
 ## Quick Start
 
@@ -14,21 +15,30 @@ Local services accessible anywhere via Cloudflare Tunnel.
 docker compose up -d
 ```
 
-You also need ttyd running for remote terminal access (`brew services start ttyd`).
+ttyd must be running separately (`brew services start ttyd`) for terminal access.
 
-## Services
+## Hostnames
 
-| Host | Service |
-|------|---------|
-| `joedodge.dev` | Homarr dashboard |
-| `t.joedodge.dev` | ttyd — Mac shell (requires ttyd running locally) |
-| `ssh.joedodge.dev` | dropbear SSH (internal) |
+| Hostname | Service | Auth |
+|----------|---------|------|
+| `joedodge.dev` | Hello World | No |
+| `home.joedodge.dev` | Homarr dashboard | Yes (Keycloak) |
+| `t.joedodge.dev` | ttyd (Mac shell) | Yes (Keycloak) |
+| `auth.joedodge.dev` | Keycloak admin | N/A |
 
 ## Architecture
 
 ```
-iPhone Safari → Cloudflare Tunnel → cloudflared (Docker) → caddy → homarr
-                                                          → ttyd (localhost:7681) → Mac shell
+Cloudflare Tunnel → Caddy:80
+  ├── joedodge.dev      → respond "Hello World!"
+  ├── auth.joedodge.dev → keycloak:8080
+  ├── t.joedodge.dev    → oauth2-proxy:4180 → ttyd (localhost:7681)
+  ├── home.joedodge.dev → oauth2-proxy:4181 → homarr:3000
+  └── /todo/*           → todo:3000
 ```
 
 ttyd runs natively on macOS (not in Docker) because macOS disables SSH Remote Login.
+
+## Adding a New Service
+
+Add to `docker-compose.yml`, add a route to `Caddyfile`. No tunnel or DNS changes needed — `*.joedodge.dev` wildcard handles all subdomains.

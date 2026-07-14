@@ -1,4 +1,93 @@
 services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: ${POSTGRES_ADMIN_PASSWORD}
+      TODO_DB_PASSWORD: ${TODO_DB_PASSWORD}
+      KEYCLOAK_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./postgres/init:/docker-entrypoint-initdb.d
+    networks:
+      - internal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:latest
+    environment:
+      KC_HOSTNAME: https://auth.joedodge.dev
+      KC_HOSTNAME_STRICT: false
+      KC_HTTP_ENABLED: true
+      KC_PROXY_HEADERS: xforwarded
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD}
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
+    command: start-dev
+    networks:
+      - edge
+      - internal
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  oauth2-proxy-ttyd:
+    image: quay.io/oauth2-proxy/oauth2-proxy:latest
+    command: >
+      --provider=keycloak-oidc
+      --client-id=ttyd
+      --client-secret=${OAUTH2_CLIENT_SECRET}
+      --upstream=http://host.docker.internal:7681
+      --redirect-url=https://t.joedodge.dev/oauth2/callback
+      --oidc-issuer-url=http://keycloak:8080/realms/local
+      --login-url=https://auth.joedodge.dev/realms/local/protocol/openid-connect/auth
+      --redeem-url=http://keycloak:8080/realms/local/protocol/openid-connect/token
+      --oidc-jwks-url=http://keycloak:8080/realms/local/protocol/openid-connect/certs
+      --insecure-oidc-skip-issuer-verification
+      --skip-oidc-discovery
+      --refresh=5m
+      --cookie-secret=${OAUTH2_COOKIE_SECRET}
+      --email-domain=*
+      --http-address=0.0.0.0:4180
+    networks:
+      - edge
+    depends_on:
+      - keycloak
+    restart: unless-stopped
+
+  oauth2-proxy-homarr:
+    image: quay.io/oauth2-proxy/oauth2-proxy:latest
+    command: >
+      --provider=keycloak-oidc
+      --client-id=homarr
+      --client-secret=${OAUTH2_CLIENT_SECRET}
+      --upstream=http://homarr:3000
+      --redirect-url=https://home.joedodge.dev/oauth2/callback
+      --oidc-issuer-url=http://keycloak:8080/realms/local
+      --login-url=https://auth.joedodge.dev/realms/local/protocol/openid-connect/auth
+      --redeem-url=http://keycloak:8080/realms/local/protocol/openid-connect/token
+      --oidc-jwks-url=http://keycloak:8080/realms/local/protocol/openid-connect/certs
+      --insecure-oidc-skip-issuer-verification
+      --skip-oidc-discovery
+      --refresh=5m
+      --cookie-secret=${OAUTH2_COOKIE_SECRET}
+      --email-domain=*
+      --http-address=0.0.0.0:4181
+    networks:
+      - edge
+    depends_on:
+      - keycloak
+    restart: unless-stopped
+
   caddy:
     image: caddy:alpine
     ports:
@@ -6,39 +95,30 @@ services:
       - "443:443"
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
+    networks:
+      - edge
     restart: unless-stopped
 
   terminal:
     build: .
     volumes:
       - ~/.ssh/id_ed25519.pub:/import/id_ed25519.pub:ro
-      - ./ttyd/ssh-key/id_ed25519.pub:/import/ttyd.pub:ro
       - terminal_data:/data
+    networks:
+      - edge
     restart: unless-stopped
 
   todo:
     build: ../my-todo
     environment:
-      DATABASE_URL: postgres://todo:todo@todo-db:5432/todo
+      DATABASE_URL: postgres://todo:${TODO_DB_PASSWORD}@postgres:5432/todo
     depends_on:
-      todo-db:
+      postgres:
         condition: service_healthy
+    networks:
+      - edge
+      - internal
     restart: unless-stopped
-
-  todo-db:
-    image: postgres:16-alpine
-    environment:
-      POSTGRES_USER: todo
-      POSTGRES_PASSWORD: todo
-      POSTGRES_DB: todo
-    volumes:
-      - todo_pgdata:/var/lib/postgresql/data
-      - ../my-todo/init.sql:/docker-entrypoint-initdb.d/init.sql
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U todo"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
 
   homarr:
     image: ghcr.io/homarr-labs/homarr:latest
@@ -47,6 +127,8 @@ services:
       - ./homarr/appdata:/appdata
     environment:
       - DISABLE_ANALYTICS=true
+    networks:
+      - edge
     restart: unless-stopped
 
   cloudflared:
@@ -56,9 +138,15 @@ services:
     volumes:
       - ./cloudflared:/etc/cloudflared
     depends_on:
-      - terminal
+      - caddy
+    networks:
+      - edge
     restart: unless-stopped
 
 volumes:
   terminal_data:
-  todo_pgdata:
+  postgres_data:
+
+networks:
+  edge:
+  internal:

@@ -194,6 +194,8 @@ func (s *Server) databases(ctx context.Context) []DBApp {
 }
 
 func (s *Server) discoverDBs(ctx context.Context) ([]DBApp, error) {
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
 	url := fmt.Sprintf("%s/api/apps?type=db", s.cfg.RegistryURL)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
@@ -422,11 +424,21 @@ func (s *Server) handleRestore(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if !identRe.MatchString(dbName) {
+		http.Error(w, "invalid database or user name", http.StatusBadRequest)
+		return
+	}
+
 	s.mu.RLock()
 	rec, ok := s.records[dbName]
 	s.mu.RUnlock()
 	if !ok || rec.LastBackupKey == "" {
 		http.Error(w, fmt.Sprintf("no backup found for %s", dbName), http.StatusNotFound)
+		return
+	}
+
+	if !identRe.MatchString(rec.DBUser) {
+		http.Error(w, "invalid database or user name", http.StatusBadRequest)
 		return
 	}
 
@@ -447,11 +459,6 @@ func (s *Server) handleRestore(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer gr.Close()
-
-	if !identRe.MatchString(dbName) || !identRe.MatchString(rec.DBUser) {
-		http.Error(w, "invalid database or user name", http.StatusBadRequest)
-		return
-	}
 
 	// Drop and recreate database as admin
 	adminPassword := s.cfg.PostgresAdminPassword

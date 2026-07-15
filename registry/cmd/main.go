@@ -207,6 +207,10 @@ func createApp(db *sql.DB) http.HandlerFunc {
 			http.Error(w, "name, path_prefix, port, app_type required", http.StatusBadRequest)
 			return
 		}
+		if a.Port <= 0 || a.Port > 65535 {
+			http.Error(w, "port must be between 1 and 65535", http.StatusBadRequest)
+			return
+		}
 		if !validAppType(a.AppType) {
 			http.Error(w, "app_type must be frontend, backend, or db", http.StatusBadRequest)
 			return
@@ -254,6 +258,10 @@ func updateApp(db *sql.DB) http.HandlerFunc {
 			http.Error(w, "name, path_prefix, port, app_type required", http.StatusBadRequest)
 			return
 		}
+		if a.Port <= 0 || a.Port > 65535 {
+			http.Error(w, "port must be between 1 and 65535", http.StatusBadRequest)
+			return
+		}
 		if !validAppType(a.AppType) {
 			http.Error(w, "app_type must be frontend, backend, or db", http.StatusBadRequest)
 			return
@@ -266,13 +274,14 @@ func updateApp(db *sql.DB) http.HandlerFunc {
 			http.Error(w, "path_prefix /pgweb is reserved", http.StatusBadRequest)
 			return
 		}
-		if a.Metadata == "" {
-			a.Metadata = "{}"
+		var metadataArg interface{}
+		if a.Metadata != "" {
+			metadataArg = a.Metadata
 		}
 		err := db.QueryRow(
-			`UPDATE apps SET name=$1, description=$2, path_prefix=$3, port=$4, app_type=$5, technology=$6, container_name=$7, metadata=$8::jsonb, device_id=$9, updated_at=now()
+			`UPDATE apps SET name=$1, description=$2, path_prefix=$3, port=$4, app_type=$5, technology=$6, container_name=$7, metadata=COALESCE($8::jsonb, metadata), device_id=$9, updated_at=now()
 			 WHERE id=$10 RETURNING id, enabled, created_at, updated_at`,
-			a.Name, a.Description, a.PathPrefix, a.Port, a.AppType, a.Technology, a.ContainerName, a.Metadata, a.DeviceID, id,
+			a.Name, a.Description, a.PathPrefix, a.Port, a.AppType, a.Technology, a.ContainerName, metadataArg, a.DeviceID, id,
 		).Scan(&a.ID, &a.Enabled, &a.CreatedAt, &a.UpdatedAt)
 		if err == sql.ErrNoRows {
 			http.Error(w, "not found", http.StatusNotFound)

@@ -3,7 +3,7 @@
 ## Architecture
 
 - `ttyd` runs natively on macOS (LaunchAgent) — tmux-based terminal access via browser.
-- Docker Compose stack: postgres, keycloak, oauth2-proxy (×2), caddy, terminal (for SSH), todo, homarr, cloudflared.
+- Docker Compose stack: postgres, keycloak, oauth2-proxy (×2), caddy, terminal (for SSH), todo, homarr, cloudflared, backup.
 - Caddy routes by hostname, Cloudflare tunnel is a single wildcard `*.joedodge.dev` → `caddy:80`.
 - Keycloak + oauth2-proxy provide OIDC auth for `t.joedodge.dev` and `home.joedodge.dev`.
 
@@ -15,8 +15,8 @@
 
 ## Network Layout
 
-- `edge` — tunnel-facing services (caddy, keycloak, oauth2-proxy, terminal, todo, homarr, cloudflared).
-- `internal` — database only (postgres, keycloak, todo).
+- `edge` — tunnel-facing services (caddy, keycloak, oauth2-proxy, terminal, todo, homarr, cloudflared, backup).
+- `internal` — database only (postgres, keycloak, todo, backup).
 
 ## Hostname Routing (Caddyfile)
 
@@ -50,6 +50,57 @@ From personal WiFi/cellular (not corp network):
 - `home.joedodge.dev` → Keycloak login → Homarr
 - `auth.joedodge.dev` → Keycloak admin console
 - `joedodge.dev` → hello world (no auth)
+
+## Backup Service
+
+The `backup/` service periodically pg_dumps registered databases to S3.
+
+### Building
+
+If behind a corporate SSL-inspecting proxy, generate the CA bundle before Docker build:
+```bash
+security export -t certs -f pemseq -k /Library/Keychains/System.keychain > backup/ca-bundle.pem
+docker build --secret id=ca-bundle,src=backup/ca-bundle.pem -t backup ./backup
+```
+Without a corporate proxy, build normally (the secret mount is optional):
+```bash
+docker build -t backup ./backup
+```
+
+- Port: `:7273`
+- Endpoints: `GET /api/backups`, `POST /api/backups/{db}/backup`, `POST /api/backups/{db}/restore`
+- Hardcoded DBs: `keycloak`, `registry`
+- Discovered DBs: fetched from registry API (`GET /api/apps?type=db`)
+- S3 path: `s3://<bucket>/backups/<dbname>/<timestamp>.sql.gz`
+- Interval: configurable via `BACKUP_INTERVAL` (default `1h`)
+- `POSTGRES_ADMIN_PASSWORD` must be set for the restore endpoint — it drops and recreates the target DB as the `postgres` superuser. Restore returns 500 without it.
+
+### S3 Bucket Setup
+
+```bash
+# Create bucket (AWS credentials must be configured)
+aws s3 mb s3://not-so-localhost-backups --region us-east-1
+
+# Verify
+aws s3 ls s3://not-so-localhost-backups
+```
+
+IAM policy (minimal) for backup service credentials:
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": ["s3:PutObject", "s3:GetObject", "s3:ListBucket"],
+      "Resource": [
+        "arn:aws:s3:::not-so-localhost-backups",
+        "arn:aws:s3:::not-so-localhost-backups/backups/*"
+      ]
+    }
+  ]
+}
+```
 
 ## To Do
 

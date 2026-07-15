@@ -6,6 +6,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_ADMIN_PASSWORD}
       TODO_DB_PASSWORD: ${TODO_DB_PASSWORD}
       KEYCLOAK_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD}
+      REGISTRY_DB_PASSWORD: ${REGISTRY_DB_PASSWORD}
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./postgres/init:/docker-entrypoint-initdb.d
@@ -129,6 +130,27 @@ services:
       - DISABLE_ANALYTICS=true
     networks:
       - edge
+    restart: unless-stopped
+
+  backup:
+    build: ./backup
+    environment:
+      DATABASE_URL: postgres://registry:${REGISTRY_DB_PASSWORD}@postgres:5432/registry
+      REGISTRY_URL: http://registry:7272
+      BACKUP_INTERVAL: ${BACKUP_INTERVAL:-1h}
+      BACKUP_S3_BUCKET: ${BACKUP_S3_BUCKET}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+      AWS_REGION: ${AWS_REGION:-us-east-1}
+      KEYCLOAK_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD}
+      REGISTRY_DB_PASSWORD: ${REGISTRY_DB_PASSWORD}
+      POSTGRES_ADMIN_PASSWORD: ${POSTGRES_ADMIN_PASSWORD}
+    networks:
+      - edge
+      - internal
+    depends_on:
+      - postgres
+      - registry
     restart: unless-stopped
 
   cloudflared:

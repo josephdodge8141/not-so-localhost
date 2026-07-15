@@ -280,9 +280,9 @@ func updateApp(db *sql.DB) http.HandlerFunc {
 		}
 		err := db.QueryRow(
 			`UPDATE apps SET name=$1, description=$2, path_prefix=$3, port=$4, app_type=$5, technology=$6, container_name=$7, metadata=COALESCE($8::jsonb, metadata), device_id=$9, updated_at=now()
-			 WHERE id=$10 RETURNING id, enabled, created_at, updated_at`,
+			 WHERE id=$10 RETURNING id, enabled, created_at, updated_at, metadata::text`,
 			a.Name, a.Description, a.PathPrefix, a.Port, a.AppType, a.Technology, a.ContainerName, metadataArg, a.DeviceID, id,
-		).Scan(&a.ID, &a.Enabled, &a.CreatedAt, &a.UpdatedAt)
+		).Scan(&a.ID, &a.Enabled, &a.CreatedAt, &a.UpdatedAt, &a.Metadata)
 		if err == sql.ErrNoRows {
 			http.Error(w, "not found", http.StatusNotFound)
 			return

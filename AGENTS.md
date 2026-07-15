@@ -43,7 +43,7 @@ oauth2-proxy uses `--oidc-issuer-url=http://keycloak:8080/realms/local` for serv
   - Standard flow enabled
   - Valid redirect URIs: `https://apps.joedodge.dev/oauth2/callback`, `http://localhost:4182/oauth2/callback`
   - Client authentication ON
-  - Client secret matches `OAUTH2_CLIENT_SECRET`
+  - Client secret matches `OAUTH2_CLIENT_SECRET_REGISTRY`
 - Users: `joe` (password: `password`)
 - Admin: `admin` (password in `.env` as `KEYCLOAK_ADMIN_PASSWORD`)
 

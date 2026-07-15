@@ -159,7 +159,7 @@ function renderApps() {
     const badgeClass = `badge-${app.app_type}`;
     const badgeLabel = app.app_type === 'frontend' ? 'Web' : app.app_type === 'backend' ? 'API' : 'DB';
     const safePrefix = escapeHtml(app.path_prefix);
-    const openUrl = `https://apps.joedodge.dev${safePrefix}`;
+    const openUrl = `${window.location.origin}${safePrefix}`;
     let links = '';
     if (app.app_type === 'frontend') {
       links = `<a href="${openUrl}" target="_blank" class="btn btn-sm btn-primary">Open →</a>`;
@@ -202,7 +202,7 @@ function escapeHtml(s) {
   if (!s) return '';
   const d = document.createElement('div');
   d.textContent = s;
-  return d.innerHTML;
+  return d.innerHTML.replace(/"/g, '&quot;');
 }
 
 function showForm(app) {

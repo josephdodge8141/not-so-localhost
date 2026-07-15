@@ -215,15 +215,19 @@ func createApp(db *sql.DB) http.HandlerFunc {
 			http.Error(w, "path_prefix must start with /", http.StatusBadRequest)
 			return
 		}
+		if a.PathPrefix == "/pgweb" || strings.HasPrefix(a.PathPrefix, "/pgweb/") {
+			http.Error(w, "path_prefix /pgweb is reserved", http.StatusBadRequest)
+			return
+		}
 		if a.Metadata == "" {
 			a.Metadata = "{}"
 		}
 		err := db.QueryRow(
 			`INSERT INTO apps (name, description, path_prefix, port, app_type, technology, container_name, metadata, device_id)
 			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9)
-			 RETURNING id, created_at, updated_at`,
+			 RETURNING id, enabled, created_at, updated_at`,
 			a.Name, a.Description, a.PathPrefix, a.Port, a.AppType, a.Technology, a.ContainerName, a.Metadata, a.DeviceID,
-		).Scan(&a.ID, &a.CreatedAt, &a.UpdatedAt)
+		).Scan(&a.ID, &a.Enabled, &a.CreatedAt, &a.UpdatedAt)
 		if err != nil {
 			if pqErr, ok := err.(*pq.Error); ok && pqErr.Code == "23505" {
 				http.Error(w, "path_prefix already in use", http.StatusConflict)
@@ -258,14 +262,18 @@ func updateApp(db *sql.DB) http.HandlerFunc {
 			http.Error(w, "path_prefix must start with /", http.StatusBadRequest)
 			return
 		}
+		if a.PathPrefix == "/pgweb" || strings.HasPrefix(a.PathPrefix, "/pgweb/") {
+			http.Error(w, "path_prefix /pgweb is reserved", http.StatusBadRequest)
+			return
+		}
 		if a.Metadata == "" {
 			a.Metadata = "{}"
 		}
 		err := db.QueryRow(
-			`UPDATE apps SET name=$1, description=$2, path_prefix=$3, port=$4, app_type=$5, technology=$6, container_name=$7, metadata=$8::jsonb, device_id=$9, enabled=$10, updated_at=now()
-			 WHERE id=$11 RETURNING id, created_at, updated_at`,
-			a.Name, a.Description, a.PathPrefix, a.Port, a.AppType, a.Technology, a.ContainerName, a.Metadata, a.DeviceID, a.Enabled, id,
-		).Scan(&a.ID, &a.CreatedAt, &a.UpdatedAt)
+			`UPDATE apps SET name=$1, description=$2, path_prefix=$3, port=$4, app_type=$5, technology=$6, container_name=$7, metadata=$8::jsonb, device_id=$9, updated_at=now()
+			 WHERE id=$10 RETURNING id, enabled, created_at, updated_at`,
+			a.Name, a.Description, a.PathPrefix, a.Port, a.AppType, a.Technology, a.ContainerName, a.Metadata, a.DeviceID, id,
+		).Scan(&a.ID, &a.Enabled, &a.CreatedAt, &a.UpdatedAt)
 		if err == sql.ErrNoRows {
 			http.Error(w, "not found", http.StatusNotFound)
 			return

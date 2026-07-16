@@ -63,7 +63,7 @@ Go app registry at `registry:7272`. Proxies registered frontend/backend apps by 
 | PUT | /api/apps/{id} | Update an app |
 | DELETE | /api/apps/{id} | Delete an app |
 
-Required fields for POST/PUT: `name`, `path_prefix` (starts with `/`), `port` (1-65535), `app_type` (`frontend`|`backend`|`db`). Optional: `description`, `technology`, `container_name`, `metadata` (JSON object), `device_id` (default `"local"`), `enabled` (default `true`).
+Required fields for POST/PUT: `name`, `path_prefix` (starts with `/`), `port` (1-65535), `app_type` (`frontend`|`backend`|`db`). Optional: `description`, `technology`, `container_name`, `metadata` (JSON-encoded string, e.g. `"{\"db_name\":\"todo\"}"`), `device_id` (default `"local"`), `enabled` (default `true`).
 
 Seed script: `./registry/seed.sh` — registers known apps, idempotent.
 

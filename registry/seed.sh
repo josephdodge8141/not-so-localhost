@@ -12,9 +12,15 @@ register() {
   name="$1"
   payload="$2"
   printf '  %s... ' "$name"
-  curl -sf -X POST "$REGISTRY_URL/api/apps" \
+  status=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$REGISTRY_URL/api/apps" \
     -H "Content-Type: application/json" \
-    -d "$payload" >/dev/null 2>&1 && echo "created" || echo "already exists"
+    -d "$payload") || true
+  case "$status" in
+    2*)     echo "created" ;;
+    409)    echo "already exists" ;;
+    000)    echo "FAILED (no response from $REGISTRY_URL)"; exit 1 ;;
+    *)      echo "FAILED (HTTP $status)"; exit 1 ;;
+  esac
 }
 
 echo "Registering known apps with registry at $REGISTRY_URL"

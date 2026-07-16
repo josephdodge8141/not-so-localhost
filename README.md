@@ -24,6 +24,7 @@ ttyd must be running separately (`brew services start ttyd`) for terminal access
 | `joedodge.dev` | Hello World | No |
 | `home.joedodge.dev` | Homarr dashboard | Yes (Keycloak) |
 | `t.joedodge.dev` | ttyd (Mac shell) | Yes (Keycloak) |
+| `apps.joedodge.dev` | App Registry | Yes (Keycloak) |
 | `auth.joedodge.dev` | Keycloak admin | N/A |
 
 ## Architecture
@@ -32,8 +33,9 @@ ttyd must be running separately (`brew services start ttyd`) for terminal access
 Cloudflare Tunnel → Caddy:80
   ├── joedodge.dev      → respond "Hello World!"
   ├── auth.joedodge.dev → keycloak:8080
-  ├── t.joedodge.dev    → oauth2-proxy:4180 → ttyd (localhost:7681)
-  ├── home.joedodge.dev → oauth2-proxy:4181 → homarr:3000
+  ├── t.joedodge.dev    → oauth2-proxy-ttyd:4180   → ttyd (localhost:7681)
+  ├── home.joedodge.dev → oauth2-proxy-homarr:4181 → homarr:3000
+  ├── apps.joedodge.dev → oauth2-proxy-registry:4182 → registry:7272
   └── /todo/*           → todo:3000
 ```
 

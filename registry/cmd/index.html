@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>App Registry</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{--bg:#0f172a;--surface:#1e293b;--surface2:#334155;--border:#475569;--text:#f1f5f9;--muted:#94a3b8;--primary:#3b82f6;--primary-hover:#2563eb;--green:#22c55e;--amber:#f59e0b;--red:#ef4444;--radius:8px;--shadow:0 1px 3px rgba(0,0,0,.3)}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
+.header{background:var(--surface);border-bottom:1px solid var(--border);padding:16px 24px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px}
+.header h1{font-size:1.25rem;font-weight:600}
+.header h1 span{color:var(--primary)}
+.btn{padding:8px 16px;border-radius:var(--radius);border:none;cursor:pointer;font-size:.875rem;font-weight:500;transition:background .15s}
+.btn-primary{background:var(--primary);color:#fff}
+.btn-primary:hover{background:var(--primary-hover)}
+.btn-sm{padding:4px 10px;font-size:.75rem}
+.btn-danger{background:var(--red);color:#fff}
+.btn-danger:hover{background:#dc2626}
+.btn-outline{background:transparent;border:1px solid var(--border);color:var(--text)}
+.btn-outline:hover{background:var(--surface2)}
+.tabs{display:flex;gap:4px;padding:16px 24px 0;flex-wrap:wrap}
+.tab{padding:8px 16px;border-radius:var(--radius) var(--radius) 0 0;border:none;cursor:pointer;font-size:.875rem;background:transparent;color:var(--muted);transition:all .15s}
+.tab:hover{color:var(--text);background:var(--surface)}
+.tab.active{background:var(--surface);color:var(--text);font-weight:600}
+.content{padding:16px 24px 24px}
+.card-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px;transition:border-color .15s}
+.card:hover{border-color:var(--primary)}
+.card-header{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:12px}
+.card-name{font-weight:600;font-size:1rem}
+.badge{display:inline-block;padding:2px 8px;border-radius:12px;font-size:.6875rem;font-weight:600;text-transform:uppercase;white-space:nowrap}
+.badge-frontend{background:#1e3a5f;color:#60a5fa}
+.badge-backend{background:#1e3a3f;color:#34d399}
+.badge-db{background:#3b1f3b;color:#c084fc}
+.card-body{font-size:.8125rem;color:var(--muted)}
+.card-body p{margin-bottom:6px}
+.card-body .label{color:var(--text);font-weight:500}
+.status-dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px}
+.status-online{background:var(--green)}
+.status-offline{background:var(--red)}
+.card-actions{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;z-index:100;padding:16px}
+.modal{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:24px;width:100%;max-width:480px}
+.modal h2{margin-bottom:16px;font-size:1.125rem}
+.form-group{margin-bottom:12px}
+.form-group label{display:block;font-size:.8125rem;color:var(--muted);margin-bottom:4px}
+.form-group input,.form-group select{width:100%;padding:8px 12px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg);color:var(--text);font-size:.875rem}
+.form-group input:focus,.form-group select:focus{outline:none;border-color:var(--primary)}
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.form-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:16px}
+.empty{text-align:center;padding:48px;color:var(--muted)}
+.toast{position:fixed;bottom:24px;right:24px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:12px 16px;font-size:.875rem;z-index:200;box-shadow:var(--shadow);animation:fadeIn .2s}
+.toast.error{border-color:var(--red)}
+.toast.success{border-color:var(--green)}
+@keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+.hidden{display:none!important}
+@media(max-width:640px){.card-grid{grid-template-columns:1fr}.form-row{grid-template-columns:1fr}.header{flex-direction:column;align-items:stretch}.header .btn{align-self:flex-end}}
+</style>
+</head>
+<body>
+<div class="header">
+  <h1><span>Apps</span>.joedodge.dev</h1>
+  <button class="btn btn-primary" onclick="showForm()">+ Register App</button>
+</div>
+
+<div class="tabs" id="tabs">
+  <button class="tab active" data-type="" onclick="filterApps('')">All</button>
+  <button class="tab" data-type="frontend" onclick="filterApps('frontend')">Frontend</button>
+  <button class="tab" data-type="backend" onclick="filterApps('backend')">Backend</button>
+  <button class="tab" data-type="db" onclick="filterApps('db')">Database</button>
+</div>
+
+<div class="content">
+  <div class="card-grid" id="appGrid"></div>
+</div>
+
+<div class="modal-overlay hidden" id="formModal">
+  <div class="modal">
+    <h2 id="formTitle">Register App</h2>
+    <form id="appForm" onsubmit="submitForm(event)">
+      <input type="hidden" id="editId">
+      <div class="form-group">
+        <label for="name">Name</label>
+        <input type="text" id="name" required>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label for="path_prefix">Path Prefix (e.g., /myapp)</label>
+          <input type="text" id="path_prefix" required>
+        </div>
+        <div class="form-group">
+          <label for="port">Port</label>
+          <input type="number" id="port" required>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label for="app_type">Type</label>
+          <select id="app_type" required>
+            <option value="frontend">Frontend</option>
+            <option value="backend">Backend</option>
+            <option value="db">Database</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="technology">Technology</label>
+          <input type="text" id="technology" placeholder="e.g., Go, React">
+        </div>
+      </div>
+      <div class="form-group">
+        <label for="description">Description</label>
+        <input type="text" id="description" placeholder="Optional">
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label for="container_name">Container Name</label>
+          <input type="text" id="container_name" placeholder="e.g., myapp">
+        </div>
+        <div class="form-group">
+          <label for="device_id">Device ID</label>
+          <input type="text" id="device_id" value="local">
+        </div>
+      </div>
+      <div class="form-actions">
+        <button type="button" class="btn btn-outline" onclick="hideForm()">Cancel</button>
+        <button type="submit" class="btn btn-primary">Save</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+let apps = [];
+let currentFilter = '';
+
+async function fetchApps() {
+  const url = currentFilter ? `/api/apps?type=${currentFilter}` : '/api/apps';
+  const res = await fetch(url);
+  apps = await res.json();
+  renderApps();
+}
+
+function filterApps(type) {
+  currentFilter = type;
+  document.querySelectorAll('.tab').forEach(t => {
+    t.classList.toggle('active', t.dataset.type === type);
+  });
+  fetchApps();
+}
+
+function renderApps() {
+  const grid = document.getElementById('appGrid');
+  if (apps.length === 0) {
+    grid.innerHTML = '<div class="empty">No apps registered. Click "+ Register App" to add one.</div>';
+    return;
+  }
+  grid.innerHTML = apps.map(app => {
+    const badgeClass = `badge-${app.app_type}`;
+    const badgeLabel = app.app_type === 'frontend' ? 'Web' : app.app_type === 'backend' ? 'API' : 'DB';
+    const safePrefix = escapeHtml(app.path_prefix);
+    const openUrl = `${window.location.origin}${safePrefix}`;
+    let links = '';
+    if (app.app_type === 'frontend') {
+      links = `<a href="${openUrl}" target="_blank" class="btn btn-sm btn-primary">Open →</a>`;
+    } else if (app.app_type === 'backend') {
+      links = `<a href="${openUrl}" target="_blank" class="btn btn-sm btn-primary">Open →</a>`;
+      links += `<a href="${openUrl}/swagger" target="_blank" class="btn btn-sm btn-outline">Swagger →</a>`;
+    } else if (app.app_type === 'db') {
+      links = `<a href="${openUrl}" target="_blank" class="btn btn-sm btn-primary">Open →</a>`;
+    }
+    const tech = app.technology ? `<p><span class="label">Tech:</span> ${escapeHtml(app.technology)}</p>` : '';
+    const desc = app.description ? `<p>${escapeHtml(app.description)}</p>` : '';
+    return `<div class="card">
+      <div class="card-header">
+        <div>
+          <div class="card-name">${escapeHtml(app.name)}</div>
+          <span class="badge ${badgeClass}">${badgeLabel}</span>
+        </div>
+        <div style="text-align:right">
+          <span class="status-dot ${app.enabled ? 'status-online' : 'status-offline'}"></span>
+          <div style="font-size:.75rem;color:var(--muted)">${app.enabled ? 'Online' : 'Offline'}</div>
+        </div>
+      </div>
+      <div class="card-body">
+        ${desc}
+        ${tech}
+        <p><span class="label">Path:</span> <code>${escapeHtml(app.path_prefix)}</code></p>
+        <p><span class="label">Port:</span> ${app.port}</p>
+        <p><span class="label">Container:</span> ${escapeHtml(app.container_name) || 'localhost'}</p>
+      </div>
+      <div class="card-actions">
+        ${links}
+        <button class="btn btn-sm btn-outline" onclick="editApp('${app.id}')">Edit</button>
+        <button class="btn btn-sm btn-danger" onclick="deleteApp('${app.id}')">Delete</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function escapeHtml(s) {
+  if (!s) return '';
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML.replace(/"/g, '&quot;');
+}
+
+function showForm(app) {
+  document.getElementById('formModal').classList.remove('hidden');
+  if (app) {
+    document.getElementById('formTitle').textContent = 'Edit App';
+    document.getElementById('editId').value = app.id;
+    document.getElementById('name').value = app.name;
+    document.getElementById('path_prefix').value = app.path_prefix;
+    document.getElementById('port').value = app.port;
+    document.getElementById('app_type').value = app.app_type;
+    document.getElementById('technology').value = app.technology;
+    document.getElementById('description').value = app.description;
+    document.getElementById('container_name').value = app.container_name;
+    document.getElementById('device_id').value = app.device_id;
+  } else {
+    document.getElementById('formTitle').textContent = 'Register App';
+    document.getElementById('editId').value = '';
+    document.getElementById('appForm').reset();
+    document.getElementById('device_id').value = 'local';
+  }
+}
+
+function hideForm() {
+  document.getElementById('formModal').classList.add('hidden');
+}
+
+function editApp(id) {
+  const app = apps.find(a => a.id === id);
+  if (app) showForm(app);
+}
+
+async function deleteApp(id) {
+  if (!confirm('Delete this app registration?')) return;
+  const res = await fetch(`/api/apps/${id}`, { method: 'DELETE' });
+  if (res.ok) {
+    showToast('App deleted', 'success');
+    fetchApps();
+  } else {
+    showToast('Failed to delete', 'error');
+  }
+}
+
+async function submitForm(e) {
+  e.preventDefault();
+  const id = document.getElementById('editId').value;
+  const body = {
+    name: document.getElementById('name').value,
+    path_prefix: document.getElementById('path_prefix').value,
+    port: parseInt(document.getElementById('port').value),
+    app_type: document.getElementById('app_type').value,
+    technology: document.getElementById('technology').value,
+    description: document.getElementById('description').value,
+    container_name: document.getElementById('container_name').value,
+    device_id: document.getElementById('device_id').value,
+  };
+
+  const method = id ? 'PUT' : 'POST';
+  const url = id ? `/api/apps/${id}` : '/api/apps';
+  const res = await fetch(url, {
+    method,
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+
+  if (res.ok) {
+    showToast(id ? 'App updated' : 'App registered', 'success');
+    hideForm();
+    fetchApps();
+  } else {
+    const text = await res.text();
+    showToast('Error: ' + text, 'error');
+  }
+}
+
+function showToast(msg, type) {
+  const el = document.createElement('div');
+  el.className = `toast ${type}`;
+  el.textContent = msg;
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 3000);
+}
+
+fetchApps();
+</script>
+</body>
+</html>

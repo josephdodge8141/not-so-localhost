@@ -51,6 +51,24 @@ oauth2-proxy uses `--oidc-issuer-url=http://keycloak:8080/realms/local` for serv
 
 All in `.env` (gitignored). Generated via `openssl rand -base64 14` or Node.js crypto. Placeholders in `.env.example`.
 
+## Registry Service
+
+Go app registry at `registry:7272`. Proxies registered frontend/backend apps by path prefix. Dashboard at `apps.joedodge.dev`.
+
+| Method | Path | Description |
+|---|---|---|
+| GET | /api/apps | List all apps |
+| GET | /api/apps?type=db | List DB apps (used by backup service) |
+| POST | /api/apps | Register a new app |
+| PUT | /api/apps/{id} | Update an app |
+| DELETE | /api/apps/{id} | Delete an app |
+
+Required fields for POST/PUT: `name`, `path_prefix` (starts with `/`), `port` (1-65535), `app_type` (`frontend`|`backend`|`db`). Optional: `description`, `technology`, `container_name`, `metadata` (JSON object), `device_id` (default `"local"`), `enabled` (default `true`).
+
+Seed script: `./registry/seed.sh` — registers known apps, idempotent.
+
+`/pgweb` is reserved (hardcoded handler for pgweb proxy).
+
 ## Testing
 
 From personal WiFi/cellular (not corp network):

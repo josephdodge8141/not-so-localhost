@@ -6,3 +6,4 @@ homarr/appdata/
 */node_modules/
 backup/ca-bundle.pem
 registry/registry
+.opencode/

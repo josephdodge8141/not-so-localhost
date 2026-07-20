@@ -31,12 +31,14 @@ http:
 
     keycloak:
       rule: "Host(`auth.joedodge.dev`)"
+      priority: 10
       entryPoints:
         - web
       service: keycloak
 
     registry:
       rule: "Host(`apps.joedodge.dev`)"
+      priority: 10
       entryPoints:
         - web
       middlewares:
@@ -45,11 +47,21 @@ http:
 
     ttyd:
       rule: "Host(`t.joedodge.dev`)"
+      priority: 10
       entryPoints:
         - web
       middlewares:
         - auth
       service: ttyd
+
+    catchall:
+      rule: "HostRegexp(`{subdomain:[a-z0-9-]+}.joedodge.dev`) && !Host(`auth.joedodge.dev`)"
+      priority: 0
+      entryPoints:
+        - web
+      middlewares:
+        - auth
+      service: registry
 
   services:
     keycloak:

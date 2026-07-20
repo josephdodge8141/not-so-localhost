@@ -106,16 +106,6 @@ func sanitizeName(name string) string {
 	return s
 }
 
-var pathPrefixRE = regexp.MustCompile("PathPrefix\\(`([^`]+)`\\)")
-
-func extractPathPrefix(rule, fallback string) string {
-	m := pathPrefixRE.FindStringSubmatch(rule)
-	if len(m) > 1 && m[1] != "" {
-		return m[1]
-	}
-	return "/" + fallback
-}
-
 func (s *Server) writeRouteFile(apps []App) {
 	if traefikRoutesDir == "" {
 		return
@@ -129,40 +119,22 @@ func (s *Server) writeRouteFile(apps []App) {
 	}
 
 	var buf strings.Builder
-	buf.WriteString("http:\n")
-
-	var hasSidecar bool
-	for _, a := range apps {
-		if a.AppType == "fe" {
-			continue
-		}
-		if !hasSidecar {
-			buf.WriteString("  middlewares:\n")
-			hasSidecar = true
-		}
-		sn := sanitizeName(a.Name)
-		prefix := extractPathPrefix(a.RouteRule, sn)
-		buf.WriteString(fmt.Sprintf("    strip-%s:\n      stripPrefix:\n        prefixes:\n          - %q\n", sn, prefix))
-	}
-
-	buf.WriteString("  routers:\n")
+	buf.WriteString("http:\n  routers:\n")
 	for _, a := range apps {
 		sn := sanitizeName(a.Name)
 		rule := a.RouteRule
 		if rule == "" {
-			rule = fmt.Sprintf("Host(`apps.joedodge.dev`) && PathPrefix(`/%s`)", sn)
+			if a.AppType == "fe" {
+				rule = fmt.Sprintf("Host(`apps.joedodge.dev`) && PathPrefix(`/%s`)", sn)
+			} else {
+				rule = fmt.Sprintf("Host(`%s.joedodge.dev`)", sn)
+			}
 		}
 		mws := ""
 		if !a.NoAuth {
-			mws = "\n        - auth"
+			mws = "\n      middlewares:\n        - auth"
 		}
-		if a.AppType != "fe" {
-			mws += fmt.Sprintf("\n        - strip-%s", sn)
-		}
-		if mws != "" {
-			mws = "\n      middlewares:" + mws
-		}
-		buf.WriteString(fmt.Sprintf("    %s:\n      rule: %q\n      entryPoints:\n        - web%s\n      service: %s\n", sn, rule, mws, sn))
+		buf.WriteString(fmt.Sprintf("    %s:\n      rule: %q\n      priority: 10\n      entryPoints:\n        - web%s\n      service: %s\n", sn, rule, mws, sn))
 	}
 
 	buf.WriteString("  services:\n")
@@ -416,10 +388,10 @@ func (s *Server) createApp(w http.ResponseWriter, r *http.Request) {
 	}
 	if a.RouteRule == "" {
 		sn := sanitizeName(a.Name)
-		if a.AppType == "db" {
+		if a.AppType == "fe" {
 			a.RouteRule = fmt.Sprintf("Host(`apps.joedodge.dev`) && PathPrefix(`/%s`)", sn)
 		} else {
-			a.RouteRule = fmt.Sprintf("Host(`apps.joedodge.dev`) && PathPrefix(`/%s`)", sn)
+			a.RouteRule = fmt.Sprintf("Host(`%s.joedodge.dev`)", sn)
 		}
 	}
 
@@ -488,7 +460,11 @@ func (s *Server) updateApp(w http.ResponseWriter, r *http.Request) {
 	}
 	if a.RouteRule == "" {
 		sn := sanitizeName(a.Name)
-		a.RouteRule = fmt.Sprintf("Host(`apps.joedodge.dev`) && PathPrefix(`/%s`)", sn)
+		if a.AppType == "fe" {
+			a.RouteRule = fmt.Sprintf("Host(`apps.joedodge.dev`) && PathPrefix(`/%s`)", sn)
+		} else {
+			a.RouteRule = fmt.Sprintf("Host(`%s.joedodge.dev`)", sn)
+		}
 	}
 
 	err = s.db.QueryRow(

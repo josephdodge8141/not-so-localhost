@@ -3,5 +3,5 @@ credentials-file: /etc/cloudflared/5108efd2-f8b8-465e-b917-954909136af7.json
 
 ingress:
   - hostname: "*.joedodge.dev"
-    service: http://caddy:80
+    service: http://traefik:80
   - service: http_status:404

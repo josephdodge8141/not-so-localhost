@@ -30,15 +30,12 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .card-header{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:12px}
 .card-name{font-weight:600;font-size:1rem}
 .badge{display:inline-block;padding:2px 8px;border-radius:12px;font-size:.6875rem;font-weight:600;text-transform:uppercase;white-space:nowrap}
-.badge-frontend{background:#1e3a5f;color:#60a5fa}
-.badge-backend{background:#1e3a3f;color:#34d399}
+.badge-fe{background:#1e3a5f;color:#60a5fa}
+.badge-be{background:#1e3a3f;color:#34d399}
 .badge-db{background:#3b1f3b;color:#c084fc}
 .card-body{font-size:.8125rem;color:var(--muted)}
 .card-body p{margin-bottom:6px}
 .card-body .label{color:var(--text);font-weight:500}
-.status-dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px}
-.status-online{background:var(--green)}
-.status-offline{background:var(--red)}
 .card-actions{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
 .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;z-index:100;padding:16px}
 .modal{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:24px;width:100%;max-width:480px}
@@ -47,15 +44,15 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .form-group label{display:block;font-size:.8125rem;color:var(--muted);margin-bottom:4px}
 .form-group input,.form-group select{width:100%;padding:8px 12px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg);color:var(--text);font-size:.875rem}
 .form-group input:focus,.form-group select:focus{outline:none;border-color:var(--primary)}
-.form-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 .form-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:16px}
+.form-group.hidden{display:none}
 .empty{text-align:center;padding:48px;color:var(--muted)}
 .toast{position:fixed;bottom:24px;right:24px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:12px 16px;font-size:.875rem;z-index:200;box-shadow:var(--shadow);animation:fadeIn .2s}
 .toast.error{border-color:var(--red)}
 .toast.success{border-color:var(--green)}
 @keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
 .hidden{display:none!important}
-@media(max-width:640px){.card-grid{grid-template-columns:1fr}.form-row{grid-template-columns:1fr}.header{flex-direction:column;align-items:stretch}.header .btn{align-self:flex-end}}
+@media(max-width:640px){.card-grid{grid-template-columns:1fr}.header{flex-direction:column;align-items:stretch}.header .btn{align-self:flex-end}}
 </style>
 </head>
 <body>
@@ -66,8 +63,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 
 <div class="tabs" id="tabs">
   <button class="tab active" data-type="" onclick="filterApps('')">All</button>
-  <button class="tab" data-type="frontend" onclick="filterApps('frontend')">Frontend</button>
-  <button class="tab" data-type="backend" onclick="filterApps('backend')">Backend</button>
+  <button class="tab" data-type="fe" onclick="filterApps('fe')">Frontend</button>
+  <button class="tab" data-type="be" onclick="filterApps('be')">Backend</button>
   <button class="tab" data-type="db" onclick="filterApps('db')">Database</button>
 </div>
 
@@ -84,43 +81,39 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
         <label for="name">Name</label>
         <input type="text" id="name" required>
       </div>
-      <div class="form-row">
-        <div class="form-group">
-          <label for="path_prefix">Path Prefix (e.g., /myapp)</label>
-          <input type="text" id="path_prefix" required>
-        </div>
-        <div class="form-group">
-          <label for="port">Port</label>
-          <input type="number" id="port" required>
-        </div>
-      </div>
-      <div class="form-row">
-        <div class="form-group">
-          <label for="app_type">Type</label>
-          <select id="app_type" required>
-            <option value="frontend">Frontend</option>
-            <option value="backend">Backend</option>
-            <option value="db">Database</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label for="technology">Technology</label>
-          <input type="text" id="technology" placeholder="e.g., Go, React">
-        </div>
-      </div>
       <div class="form-group">
         <label for="description">Description</label>
         <input type="text" id="description" placeholder="Optional">
       </div>
-      <div class="form-row">
-        <div class="form-group">
-          <label for="container_name">Container Name</label>
-          <input type="text" id="container_name" placeholder="e.g., myapp">
-        </div>
-        <div class="form-group">
-          <label for="device_id">Device ID</label>
-          <input type="text" id="device_id" value="local">
-        </div>
+      <div class="form-group">
+        <label for="app_type">Type</label>
+        <select id="app_type" required onchange="onTypeChange()">
+          <option value="fe">Frontend</option>
+          <option value="be">Backend (OpenAPI)</option>
+          <option value="db">Database (Postgres)</option>
+        </select>
+      </div>
+      <div class="form-group" id="field-route">
+        <label for="route_rule">Route Rule <span class="muted">(leave blank for default)</span></label>
+        <input type="text" id="route_rule" placeholder='e.g. Host(`apps.jd.dev`) && PathPrefix(`/myapp`)'>
+      </div>
+      <div class="form-group" id="field-target_url">
+        <label for="target_url">Target URL</label>
+        <input type="text" id="target_url" placeholder="http://myapp:3000">
+      </div>
+      <div class="form-group hidden" id="field-docs_url">
+        <label for="docs_url">OpenAPI Spec URL</label>
+        <input type="text" id="docs_url" placeholder="http://myapp:3000/swagger">
+      </div>
+      <div class="form-group hidden" id="field-connection_string">
+        <label for="connection_string">Connection String</label>
+        <input type="text" id="connection_string" placeholder="postgres://user:pass@host:5432/db">
+      </div>
+      <div class="form-group">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+          <input type="checkbox" id="no_auth" style="width:auto">
+          Bypass authentication
+        </label>
       </div>
       <div class="form-actions">
         <button type="button" class="btn btn-outline" onclick="hideForm()">Cancel</button>
@@ -149,6 +142,13 @@ function filterApps(type) {
   fetchApps();
 }
 
+function onTypeChange() {
+  const t = document.getElementById('app_type').value;
+  document.getElementById('field-target_url').classList.toggle('hidden', t !== 'fe');
+  document.getElementById('field-docs_url').classList.toggle('hidden', t !== 'be');
+  document.getElementById('field-connection_string').classList.toggle('hidden', t !== 'db');
+}
+
 function renderApps() {
   const grid = document.getElementById('appGrid');
   if (apps.length === 0) {
@@ -157,19 +157,15 @@ function renderApps() {
   }
   grid.innerHTML = apps.map(app => {
     const badgeClass = `badge-${app.app_type}`;
-    const badgeLabel = app.app_type === 'frontend' ? 'Web' : app.app_type === 'backend' ? 'API' : 'DB';
-    const safePrefix = escapeHtml(app.path_prefix);
-    const openUrl = `${window.location.origin}${safePrefix}`;
-    let links = '';
-    if (app.app_type === 'frontend') {
-      links = `<a href="${openUrl}" target="_blank" class="btn btn-sm btn-primary">Open →</a>`;
-    } else if (app.app_type === 'backend') {
-      links = `<a href="${openUrl}" target="_blank" class="btn btn-sm btn-primary">Open →</a>`;
-      links += `<a href="${openUrl}/swagger" target="_blank" class="btn btn-sm btn-outline">Swagger →</a>`;
-    } else if (app.app_type === 'db') {
-      links = `<a href="${openUrl}" target="_blank" class="btn btn-sm btn-primary">Open →</a>`;
-    }
-    const tech = app.technology ? `<p><span class="label">Tech:</span> ${escapeHtml(app.technology)}</p>` : '';
+    const badgeLabel = app.app_type === 'fe' ? 'Web' : app.app_type === 'be' ? 'API' : 'DB';
+    const openUrl = (() => {
+      const hostMatch = app.route_rule && app.route_rule.match(/Host\(`([^`]+)`\)/);
+      if (hostMatch) {
+        const pathMatch = app.route_rule.match(/PathPrefix\(`([^`]+)`\)/);
+        return `https://${hostMatch[1]}${pathMatch ? pathMatch[1] : ''}`;
+      }
+      return '#';
+    })();
     const desc = app.description ? `<p>${escapeHtml(app.description)}</p>` : '';
     return `<div class="card">
       <div class="card-header">
@@ -177,20 +173,13 @@ function renderApps() {
           <div class="card-name">${escapeHtml(app.name)}</div>
           <span class="badge ${badgeClass}">${badgeLabel}</span>
         </div>
-        <div style="text-align:right">
-          <span class="status-dot ${app.enabled ? 'status-online' : 'status-offline'}"></span>
-          <div style="font-size:.75rem;color:var(--muted)">${app.enabled ? 'Online' : 'Offline'}</div>
-        </div>
       </div>
       <div class="card-body">
         ${desc}
-        ${tech}
-        <p><span class="label">Path:</span> <code>${escapeHtml(app.path_prefix)}</code></p>
-        <p><span class="label">Port:</span> ${app.port}</p>
-        <p><span class="label">Container:</span> ${escapeHtml(app.container_name) || 'localhost'}</p>
+        <p><span class="label">Route:</span> <code>${escapeHtml(app.route_rule)}</code></p>
       </div>
       <div class="card-actions">
-        ${links}
+        <a href="${openUrl}" target="_blank" class="btn btn-sm btn-primary">Open →</a>
         <button class="btn btn-sm btn-outline" onclick="editApp('${app.id}')">Edit</button>
         <button class="btn btn-sm btn-danger" onclick="deleteApp('${app.id}')">Delete</button>
       </div>
@@ -207,23 +196,25 @@ function escapeHtml(s) {
 
 function showForm(app) {
   document.getElementById('formModal').classList.remove('hidden');
+  onTypeChange();
   if (app) {
     document.getElementById('formTitle').textContent = 'Edit App';
     document.getElementById('editId').value = app.id;
     document.getElementById('name').value = app.name;
-    document.getElementById('path_prefix').value = app.path_prefix;
-    document.getElementById('port').value = app.port;
-    document.getElementById('app_type').value = app.app_type;
-    document.getElementById('technology').value = app.technology;
     document.getElementById('description').value = app.description;
-    document.getElementById('container_name').value = app.container_name;
-    document.getElementById('device_id').value = app.device_id;
+    document.getElementById('app_type').value = app.app_type;
+    document.getElementById('route_rule').value = app.route_rule;
+    document.getElementById('target_url').value = app.target_url || '';
+    document.getElementById('docs_url').value = app.docs_url || '';
+    document.getElementById('connection_string').value = '';
+    document.getElementById('no_auth').checked = app.no_auth;
   } else {
     document.getElementById('formTitle').textContent = 'Register App';
     document.getElementById('editId').value = '';
     document.getElementById('appForm').reset();
-    document.getElementById('device_id').value = 'local';
+    document.getElementById('no_auth').checked = false;
   }
+  onTypeChange();
 }
 
 function hideForm() {
@@ -249,16 +240,17 @@ async function deleteApp(id) {
 async function submitForm(e) {
   e.preventDefault();
   const id = document.getElementById('editId').value;
+  const appType = document.getElementById('app_type').value;
   const body = {
     name: document.getElementById('name').value,
-    path_prefix: document.getElementById('path_prefix').value,
-    port: parseInt(document.getElementById('port').value),
-    app_type: document.getElementById('app_type').value,
-    technology: document.getElementById('technology').value,
     description: document.getElementById('description').value,
-    container_name: document.getElementById('container_name').value,
-    device_id: document.getElementById('device_id').value,
+    app_type: appType,
+    route_rule: document.getElementById('route_rule').value,
+    no_auth: document.getElementById('no_auth').checked,
   };
+  if (appType === 'fe') body.target_url = document.getElementById('target_url').value;
+  if (appType === 'be') body.docs_url = document.getElementById('docs_url').value;
+  if (appType === 'db') body.connection_string = document.getElementById('connection_string').value;
 
   const method = id ? 'PUT' : 'POST';
   const url = id ? `/api/apps/${id}` : '/api/apps';

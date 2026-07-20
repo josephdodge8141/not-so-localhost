@@ -1,38 +1,50 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"embed"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
-	"net/http/httputil"
-	"net/url"
 	"os"
+	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
+	"github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/api/types/filters"
+	"github.com/docker/docker/api/types/image"
+	"github.com/docker/docker/api/types/network"
+	"github.com/docker/docker/client"
 	"github.com/lib/pq"
+)
+
+var (
+	traefikRoutesDir = os.Getenv("TRAEFIK_ROUTES_DIR")
+	routesFile       = "managed.yml"
+	backupToken      = os.Getenv("BACKUP_TOKEN")
 )
 
 //go:embed index.html
 var frontend embed.FS
 
 type App struct {
-	ID            string    `json:"id"`
-	Name          string    `json:"name"`
-	Description   string    `json:"description"`
-	PathPrefix    string    `json:"path_prefix"`
-	Port          int       `json:"port"`
-	AppType       string    `json:"app_type"`
-	Technology    string    `json:"technology"`
-	ContainerName string    `json:"container_name"`
-	Metadata      string    `json:"metadata"`
-	DeviceID      string    `json:"device_id"`
-	Enabled       bool      `json:"enabled"`
-	CreatedAt     time.Time `json:"created_at"`
-	UpdatedAt     time.Time `json:"updated_at"`
+	ID               string    `json:"id"`
+	Name             string    `json:"name"`
+	Description      string    `json:"description"`
+	AppType          string    `json:"app_type"`
+	RouteRule        string    `json:"route_rule"`
+	TargetURL        string    `json:"target_url,omitempty"`
+	DocsURL          string    `json:"docs_url,omitempty"`
+	ConnectionString string    `json:"connection_string,omitempty"`
+	NoAuth           bool      `json:"no_auth"`
+	Enabled          bool      `json:"enabled"`
+	CreatedAt        time.Time `json:"created_at"`
+	UpdatedAt        time.Time `json:"updated_at"`
 }
 
 func main() {
@@ -53,93 +65,268 @@ func main() {
 
 	migrate(db)
 
-	pgwebProxy := httputil.NewSingleHostReverseProxy(mustURL("http://pgweb:8081"))
-	pgwebEmail := os.Getenv("PGWEB_ALLOWED_EMAIL")
-	appProxies := newAppProxyCache(db)
+	dockerClient, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
+	if err != nil {
+		log.Fatalf("docker client: %v", err)
+	}
+
+	serv := &Server{db: db, docker: dockerClient}
+	serv.ensureAllSidecars(context.Background())
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/{$}", serveFrontend)
-	mux.HandleFunc("GET /api/apps", listApps(db))
-	mux.HandleFunc("POST /api/apps", createApp(db))
-	mux.HandleFunc("PUT /api/apps/{id}", updateApp(db))
-	mux.HandleFunc("DELETE /api/apps/{id}", deleteApp(db))
-
-	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/pgweb" || strings.HasPrefix(r.URL.Path, "/pgweb/") {
-			if pgwebEmail == "" || r.Header.Get("X-Forwarded-Email") != pgwebEmail {
-				http.Error(w, "forbidden", http.StatusForbidden)
-				return
-			}
-			r.URL.Path = strings.TrimPrefix(r.URL.Path, "/pgweb")
-			if r.URL.RawPath != "" {
-				r.URL.RawPath = strings.TrimPrefix(r.URL.RawPath, "/pgweb")
-			}
-			if r.URL.Path == "" {
-				r.URL.Path = "/"
-			}
-			pgwebProxy.ServeHTTP(w, r)
-			return
-		}
-		appProxies.ServeHTTP(w, r)
-	})
+	mux.HandleFunc("GET /api/apps", serv.listApps)
+	mux.HandleFunc("POST /api/apps", serv.createApp)
+	mux.HandleFunc("PUT /api/apps/{id}", serv.updateApp)
+	mux.HandleFunc("DELETE /api/apps/{id}", serv.deleteApp)
+	mux.HandleFunc("GET /internal/backup-targets", serv.backupTargets)
 
 	log.Println("registry on :7272")
 	log.Fatal(http.ListenAndServe(":7272", mux))
 }
 
-func mustURL(s string) *url.URL {
-	u, err := url.Parse(s)
+type Server struct {
+	db     *sql.DB
+	docker *client.Client
+}
+
+var (
+	traefikNetwork  = "not-so-localhost_edge"
+	internalNetwork = "not-so-localhost_internal"
+)
+
+func sanitizeName(name string) string {
+	reg := regexp.MustCompile(`[^a-z0-9-]`)
+	s := strings.ToLower(name)
+	s = reg.ReplaceAllString(s, "-")
+	s = strings.Trim(s, "-")
+	if s == "" {
+		s = "app"
+	}
+	return s
+}
+
+var pathPrefixRE = regexp.MustCompile("PathPrefix\\(`([^`]+)`\\)")
+
+func extractPathPrefix(rule, fallback string) string {
+	m := pathPrefixRE.FindStringSubmatch(rule)
+	if len(m) > 1 && m[1] != "" {
+		return m[1]
+	}
+	return "/" + fallback
+}
+
+func (s *Server) writeRouteFile(apps []App) {
+	if traefikRoutesDir == "" {
+		return
+	}
+	p := filepath.Join(traefikRoutesDir, routesFile)
+
+	if len(apps) == 0 {
+		os.Remove(p)
+		log.Printf("removed %s (no managed apps)", p)
+		return
+	}
+
+	var buf strings.Builder
+	buf.WriteString("http:\n")
+
+	var hasSidecar bool
+	for _, a := range apps {
+		if a.AppType == "fe" {
+			continue
+		}
+		if !hasSidecar {
+			buf.WriteString("  middlewares:\n")
+			hasSidecar = true
+		}
+		sn := sanitizeName(a.Name)
+		prefix := extractPathPrefix(a.RouteRule, sn)
+		buf.WriteString(fmt.Sprintf("    strip-%s:\n      stripPrefix:\n        prefixes:\n          - %q\n", sn, prefix))
+	}
+
+	buf.WriteString("  routers:\n")
+	for _, a := range apps {
+		sn := sanitizeName(a.Name)
+		rule := a.RouteRule
+		if rule == "" {
+			rule = fmt.Sprintf("Host(`apps.joedodge.dev`) && PathPrefix(`/%s`)", sn)
+		}
+		mws := ""
+		if !a.NoAuth {
+			mws = "\n        - auth"
+		}
+		if a.AppType != "fe" {
+			mws += fmt.Sprintf("\n        - strip-%s", sn)
+		}
+		if mws != "" {
+			mws = "\n      middlewares:" + mws
+		}
+		buf.WriteString(fmt.Sprintf("    %s:\n      rule: %q\n      entryPoints:\n        - web%s\n      service: %s\n", sn, rule, mws, sn))
+	}
+
+	buf.WriteString("  services:\n")
+	for _, a := range apps {
+		sn := sanitizeName(a.Name)
+		var svcURL string
+		switch a.AppType {
+		case "fe":
+			svcURL = a.TargetURL
+		case "be":
+			svcURL = fmt.Sprintf("http://%s-swagger:8080", sn)
+		case "db":
+			svcURL = fmt.Sprintf("http://%s-pgweb:8081", sn)
+		}
+		if svcURL == "" {
+			continue
+		}
+		buf.WriteString(fmt.Sprintf("    %s:\n      loadBalancer:\n        servers:\n          - url: %q\n", sn, svcURL))
+	}
+
+	if err := os.WriteFile(p, []byte(buf.String()), 0644); err != nil {
+		log.Printf("write route file: %v", err)
+		return
+	}
+	log.Printf("wrote %d routes to %s", len(apps), p)
+}
+
+func (s *Server) writeAllRoutes() {
+	rows, err := s.db.Query(`SELECT id, name, COALESCE(description,''), app_type, COALESCE(route_rule,''), COALESCE(target_url,''), COALESCE(docs_url,''), no_auth, enabled, created_at, updated_at FROM apps WHERE enabled = true`)
 	if err != nil {
-		panic(err)
-	}
-	return u
-}
-
-type appProxyCache struct {
-	db *sql.DB
-}
-
-func newAppProxyCache(db *sql.DB) *appProxyCache {
-	return &appProxyCache{db: db}
-}
-
-func (c *appProxyCache) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
-	if len(parts) == 0 || parts[0] == "" {
-		http.NotFound(w, r)
+		log.Printf("writeAllRoutes query: %v", err)
 		return
 	}
+	defer rows.Close()
 
-	prefix := "/" + parts[0]
-	var containerName string
-	var port int
-	err := c.db.QueryRow(
-		`SELECT container_name, port FROM apps WHERE path_prefix = $1 AND enabled = true`, prefix,
-	).Scan(&containerName, &port)
-	if err == sql.ErrNoRows {
-		http.NotFound(w, r)
-		return
+	var apps []App
+	for rows.Next() {
+		var a App
+		if err := rows.Scan(&a.ID, &a.Name, &a.Description, &a.AppType, &a.RouteRule, &a.TargetURL, &a.DocsURL, &a.NoAuth, &a.Enabled, &a.CreatedAt, &a.UpdatedAt); err != nil {
+			log.Printf("writeAllRoutes scan: %v", err)
+			continue
+		}
+		apps = append(apps, a)
 	}
+	s.writeRouteFile(apps)
+}
+
+func (s *Server) ensureImage(ctx context.Context, ref string) error {
+	_, _, err := s.docker.ImageInspectWithRaw(ctx, ref)
+	if err == nil {
+		return nil
+	}
+	pull, err := s.docker.ImagePull(ctx, ref, image.PullOptions{})
 	if err != nil {
-		http.Error(w, "service unavailable", http.StatusServiceUnavailable)
+		return fmt.Errorf("pull: %w", err)
+	}
+	defer pull.Close()
+	io.Copy(io.Discard, pull)
+	return nil
+}
+
+func (s *Server) deploySidecar(ctx context.Context, app App) error {
+	sn := sanitizeName(app.Name)
+
+	var (
+		imageRef string
+		env      []string
+	)
+
+	switch app.AppType {
+	case "be":
+		imageRef = "swaggerapi/swagger-ui:latest"
+		docURL := app.DocsURL
+		if docURL == "" {
+			docURL = app.TargetURL + "/swagger"
+		}
+		env = []string{"SWAGGER_JSON_URL=" + docURL}
+	case "db":
+		imageRef = "sosedoff/pgweb:latest"
+		env = []string{"PGWEB_DATABASE_URL=" + app.ConnectionString}
+	default:
+		return nil
+	}
+
+	if err := s.ensureImage(ctx, imageRef); err != nil {
+		return fmt.Errorf("ensure image %s: %w", imageRef, err)
+	}
+
+	contName := sn + "-swagger"
+	if app.AppType == "db" {
+		contName = sn + "-pgweb"
+	}
+
+	s.removeContainer(ctx, contName)
+
+	cfg := &container.Config{
+		Image: imageRef,
+		Env:   env,
+	}
+	hostCfg := &container.HostConfig{
+		RestartPolicy: container.RestartPolicy{Name: "unless-stopped"},
+	}
+	netCfg := &network.NetworkingConfig{
+		EndpointsConfig: map[string]*network.EndpointSettings{
+			traefikNetwork:  {},
+			internalNetwork: {},
+		},
+	}
+
+	cont, err := s.docker.ContainerCreate(ctx, cfg, hostCfg, netCfg, nil, contName)
+	if err != nil {
+		return fmt.Errorf("container create %s: %w", contName, err)
+	}
+
+	if err := s.docker.ContainerStart(ctx, cont.ID, container.StartOptions{}); err != nil {
+		s.docker.ContainerRemove(ctx, cont.ID, container.RemoveOptions{Force: true})
+		return fmt.Errorf("container start %s: %w", contName, err)
+	}
+
+	log.Printf("deployed sidecar %s (%s)", contName, cont.ID[:12])
+	return nil
+}
+
+func (s *Server) removeSidecar(ctx context.Context, app App) {
+	sn := sanitizeName(app.Name)
+	for _, name := range []string{sn + "-swagger", sn + "-pgweb"} {
+		s.removeContainer(ctx, name)
+	}
+}
+
+func (s *Server) removeContainer(ctx context.Context, name string) {
+	containers, err := s.docker.ContainerList(ctx, container.ListOptions{
+		All:     true,
+		Filters: filters.NewArgs(filters.Arg("name", "^/?"+name+"$")),
+	})
+	if err != nil {
 		return
 	}
+	for _, c := range containers {
+		s.docker.ContainerStop(ctx, c.ID, container.StopOptions{})
+		s.docker.ContainerRemove(ctx, c.ID, container.RemoveOptions{Force: true})
+		log.Printf("removed container %s (%s)", name, c.ID[:12])
+	}
+}
 
-	host := containerName
-	if host == "" {
-		host = "localhost"
+func (s *Server) ensureAllSidecars(ctx context.Context) {
+	rows, err := s.db.Query(`SELECT id, name, app_type, COALESCE(target_url,''), COALESCE(docs_url,''), COALESCE(connection_string,'') FROM apps WHERE enabled = true AND app_type IN ('be', 'db')`)
+	if err != nil {
+		log.Printf("ensureSidecars query: %v", err)
+		return
 	}
-	target := fmt.Sprintf("%s:%d", host, port)
-	proxy := httputil.NewSingleHostReverseProxy(mustURL("http://" + target))
+	defer rows.Close()
 
-	r.URL.Path = strings.TrimPrefix(r.URL.Path, prefix)
-	if r.URL.RawPath != "" {
-		r.URL.RawPath = strings.TrimPrefix(r.URL.RawPath, prefix)
+	for rows.Next() {
+		var a App
+		if err := rows.Scan(&a.ID, &a.Name, &a.AppType, &a.TargetURL, &a.DocsURL, &a.ConnectionString); err != nil {
+			log.Printf("ensureSidecars scan: %v", err)
+			continue
+		}
+		if err := s.deploySidecar(ctx, a); err != nil {
+			log.Printf("deploy sidecar %s: %v", a.Name, err)
+		}
 	}
-	if r.URL.Path == "" {
-		r.URL.Path = "/"
-	}
-	proxy.ServeHTTP(w, r)
+	s.writeAllRoutes()
 }
 
 func serveFrontend(w http.ResponseWriter, r *http.Request) {
@@ -152,184 +339,261 @@ func serveFrontend(w http.ResponseWriter, r *http.Request) {
 	w.Write(data)
 }
 
-func listApps(db *sql.DB) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		var (
-			rows *sql.Rows
-			err  error
-		)
-		appType := r.URL.Query().Get("type")
-		if appType != "" {
-			rows, err = db.Query(
-				`SELECT id, name, description, path_prefix, port, app_type, technology, container_name, metadata::text, device_id, enabled, created_at, updated_at FROM apps WHERE app_type = $1 ORDER BY name`, appType,
-			)
-		} else {
-			rows, err = db.Query(
-				`SELECT id, name, description, path_prefix, port, app_type, technology, container_name, metadata::text, device_id, enabled, created_at, updated_at FROM apps ORDER BY name`,
-			)
-		}
-		if err != nil {
+func (s *Server) listApps(w http.ResponseWriter, r *http.Request) {
+	var (
+		rows *sql.Rows
+		err  error
+	)
+	appType := r.URL.Query().Get("type")
+	q := `SELECT id, name, COALESCE(description,''), app_type, COALESCE(route_rule,''), COALESCE(target_url,''), COALESCE(docs_url,''), no_auth, enabled, created_at, updated_at, connection_string != '' FROM apps`
+	if appType != "" {
+		rows, err = s.db.Query(q+" WHERE app_type = $1 ORDER BY name", appType)
+	} else {
+		rows, err = s.db.Query(q + " ORDER BY name")
+	}
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+
+	type safeApp struct {
+		ID          string    `json:"id"`
+		Name        string    `json:"name"`
+		Description string    `json:"description"`
+		AppType     string    `json:"app_type"`
+		RouteRule   string    `json:"route_rule"`
+		TargetURL   string    `json:"target_url"`
+		DocsURL     string    `json:"docs_url"`
+		NoAuth      bool      `json:"no_auth"`
+		Enabled     bool      `json:"enabled"`
+		CreatedAt   time.Time `json:"created_at"`
+		UpdatedAt   time.Time `json:"updated_at"`
+		HasDB       bool      `json:"has_db"`
+	}
+	apps := []safeApp{}
+	for rows.Next() {
+		var a safeApp
+		if err := rows.Scan(&a.ID, &a.Name, &a.Description, &a.AppType, &a.RouteRule, &a.TargetURL, &a.DocsURL, &a.NoAuth, &a.Enabled, &a.CreatedAt, &a.UpdatedAt, &a.HasDB); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		defer rows.Close()
-
-		apps := []App{}
-		for rows.Next() {
-			var a App
-			if err := rows.Scan(&a.ID, &a.Name, &a.Description, &a.PathPrefix, &a.Port, &a.AppType, &a.Technology, &a.ContainerName, &a.Metadata, &a.DeviceID, &a.Enabled, &a.CreatedAt, &a.UpdatedAt); err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
-				return
-			}
-			apps = append(apps, a)
-		}
-		if err := rows.Err(); err != nil {
-			http.Error(w, "db error", http.StatusInternalServerError)
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(apps)
+		apps = append(apps, a)
 	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(apps)
 }
 
 func validAppType(t string) bool {
-	return t == "frontend" || t == "backend" || t == "db"
+	return t == "fe" || t == "be" || t == "db"
 }
 
-func createApp(db *sql.DB) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		var a App
-		if err := json.NewDecoder(r.Body).Decode(&a); err != nil {
-			http.Error(w, "invalid body: "+err.Error(), http.StatusBadRequest)
-			return
-		}
-		if a.Name == "" || a.PathPrefix == "" || a.Port == 0 || a.AppType == "" {
-			http.Error(w, "name, path_prefix, port, app_type required", http.StatusBadRequest)
-			return
-		}
-		if a.Port <= 0 || a.Port > 65535 {
-			http.Error(w, "port must be between 1 and 65535", http.StatusBadRequest)
-			return
-		}
-		if !validAppType(a.AppType) {
-			http.Error(w, "app_type must be frontend, backend, or db", http.StatusBadRequest)
-			return
-		}
-		if !strings.HasPrefix(a.PathPrefix, "/") {
-			http.Error(w, "path_prefix must start with /", http.StatusBadRequest)
-			return
-		}
-		if a.PathPrefix == "/pgweb" || strings.HasPrefix(a.PathPrefix, "/pgweb/") {
-			http.Error(w, "path_prefix /pgweb is reserved", http.StatusBadRequest)
-			return
-		}
-		if a.Metadata == "" {
-			a.Metadata = "{}"
-		}
-		err := db.QueryRow(
-			`INSERT INTO apps (name, description, path_prefix, port, app_type, technology, container_name, metadata, device_id)
-			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9)
-			 RETURNING id, enabled, created_at, updated_at`,
-			a.Name, a.Description, a.PathPrefix, a.Port, a.AppType, a.Technology, a.ContainerName, a.Metadata, a.DeviceID,
-		).Scan(&a.ID, &a.Enabled, &a.CreatedAt, &a.UpdatedAt)
-		if err != nil {
-			if pqErr, ok := err.(*pq.Error); ok && pqErr.Code == "23505" {
-				http.Error(w, "path_prefix already in use", http.StatusConflict)
-				return
-			}
-			http.Error(w, "internal error", http.StatusInternalServerError)
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusCreated)
-		json.NewEncoder(w).Encode(a)
+func (s *Server) createApp(w http.ResponseWriter, r *http.Request) {
+	var a App
+	if err := json.NewDecoder(r.Body).Decode(&a); err != nil {
+		http.Error(w, "invalid body: "+err.Error(), http.StatusBadRequest)
+		return
 	}
-}
-
-func updateApp(db *sql.DB) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		id := r.PathValue("id")
-		var a App
-		if err := json.NewDecoder(r.Body).Decode(&a); err != nil {
-			http.Error(w, "invalid body", http.StatusBadRequest)
-			return
-		}
-		if a.Name == "" || a.PathPrefix == "" || a.Port == 0 || a.AppType == "" {
-			http.Error(w, "name, path_prefix, port, app_type required", http.StatusBadRequest)
-			return
-		}
-		if a.Port <= 0 || a.Port > 65535 {
-			http.Error(w, "port must be between 1 and 65535", http.StatusBadRequest)
-			return
-		}
-		if !validAppType(a.AppType) {
-			http.Error(w, "app_type must be frontend, backend, or db", http.StatusBadRequest)
-			return
-		}
-		if !strings.HasPrefix(a.PathPrefix, "/") {
-			http.Error(w, "path_prefix must start with /", http.StatusBadRequest)
-			return
-		}
-		if a.PathPrefix == "/pgweb" || strings.HasPrefix(a.PathPrefix, "/pgweb/") {
-			http.Error(w, "path_prefix /pgweb is reserved", http.StatusBadRequest)
-			return
-		}
-		var metadataArg interface{}
-		if a.Metadata != "" {
-			metadataArg = a.Metadata
-		}
-		err := db.QueryRow(
-			`UPDATE apps SET name=$1, description=$2, path_prefix=$3, port=$4, app_type=$5, technology=$6, container_name=$7, metadata=COALESCE($8::jsonb, metadata), device_id=$9, updated_at=now()
-			 WHERE id=$10 RETURNING id, enabled, created_at, updated_at, metadata::text`,
-			a.Name, a.Description, a.PathPrefix, a.Port, a.AppType, a.Technology, a.ContainerName, metadataArg, a.DeviceID, id,
-		).Scan(&a.ID, &a.Enabled, &a.CreatedAt, &a.UpdatedAt, &a.Metadata)
-		if err == sql.ErrNoRows {
-			http.Error(w, "not found", http.StatusNotFound)
-			return
-		}
-		if err != nil {
-			if pqErr, ok := err.(*pq.Error); ok && pqErr.Code == "23505" {
-				http.Error(w, "path_prefix already in use", http.StatusConflict)
-				return
-			}
-			http.Error(w, "internal error", http.StatusInternalServerError)
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(a)
+	if a.Name == "" || a.AppType == "" {
+		http.Error(w, "name and app_type required", http.StatusBadRequest)
+		return
 	}
+	if !validAppType(a.AppType) {
+		http.Error(w, "app_type must be fe, be, or db", http.StatusBadRequest)
+		return
+	}
+	if a.AppType == "fe" && a.TargetURL == "" {
+		http.Error(w, "target_url required for fe type", http.StatusBadRequest)
+		return
+	}
+	if a.AppType == "be" && a.DocsURL == "" {
+		http.Error(w, "docs_url required for be type", http.StatusBadRequest)
+		return
+	}
+	if a.AppType == "db" && a.ConnectionString == "" {
+		http.Error(w, "connection_string required for db type", http.StatusBadRequest)
+		return
+	}
+	if a.RouteRule == "" {
+		sn := sanitizeName(a.Name)
+		if a.AppType == "db" {
+			a.RouteRule = fmt.Sprintf("Host(`apps.joedodge.dev`) && PathPrefix(`/%s`)", sn)
+		} else {
+			a.RouteRule = fmt.Sprintf("Host(`apps.joedodge.dev`) && PathPrefix(`/%s`)", sn)
+		}
+	}
+
+	err := s.db.QueryRow(
+		`INSERT INTO apps (name, description, app_type, route_rule, target_url, docs_url, connection_string, no_auth)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		 RETURNING id, enabled, created_at, updated_at`,
+		a.Name, a.Description, a.AppType, a.RouteRule, a.TargetURL, a.DocsURL, a.ConnectionString, a.NoAuth,
+	).Scan(&a.ID, &a.Enabled, &a.CreatedAt, &a.UpdatedAt)
+	if err != nil {
+		if pqErr, ok := err.(*pq.Error); ok && pqErr.Code == "23505" {
+			http.Error(w, "name already in use", http.StatusConflict)
+			return
+		}
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+
+	if a.AppType == "be" || a.AppType == "db" {
+		if err := s.deploySidecar(context.Background(), a); err != nil {
+			log.Printf("sidecar deploy %s: %v", a.Name, err)
+		}
+	}
+
+	s.writeAllRoutes()
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(a)
 }
 
-func deleteApp(db *sql.DB) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		id := r.PathValue("id")
-		result, err := db.Exec(`DELETE FROM apps WHERE id=$1`, id)
-		if err != nil {
+func (s *Server) updateApp(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+
+	var old App
+	err := s.db.QueryRow(`SELECT id, name, app_type, COALESCE(target_url,''), COALESCE(docs_url,''), COALESCE(connection_string,'') FROM apps WHERE id = $1`, id).Scan(&old.ID, &old.Name, &old.AppType, &old.TargetURL, &old.DocsURL, &old.ConnectionString)
+	if err == sql.ErrNoRows {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+
+	var a App
+	if err := json.NewDecoder(r.Body).Decode(&a); err != nil {
+		http.Error(w, "invalid body", http.StatusBadRequest)
+		return
+	}
+	if a.Name == "" || a.AppType == "" {
+		http.Error(w, "name and app_type required", http.StatusBadRequest)
+		return
+	}
+	if !validAppType(a.AppType) {
+		http.Error(w, "app_type must be fe, be, or db", http.StatusBadRequest)
+		return
+	}
+	if a.AppType == "fe" && a.TargetURL == "" {
+		http.Error(w, "target_url required for fe type", http.StatusBadRequest)
+		return
+	}
+	if a.AppType == "be" && a.DocsURL == "" {
+		http.Error(w, "docs_url required for be type", http.StatusBadRequest)
+		return
+	}
+	if a.AppType == "db" && a.ConnectionString == "" {
+		http.Error(w, "connection_string required for db type", http.StatusBadRequest)
+		return
+	}
+	if a.RouteRule == "" {
+		sn := sanitizeName(a.Name)
+		a.RouteRule = fmt.Sprintf("Host(`apps.joedodge.dev`) && PathPrefix(`/%s`)", sn)
+	}
+
+	err = s.db.QueryRow(
+		`UPDATE apps SET name=$1, description=$2, app_type=$3, route_rule=$4, target_url=$5, docs_url=$6, connection_string=$7, no_auth=$8, updated_at=now()
+		 WHERE id=$9 RETURNING id, enabled, created_at, updated_at`,
+		a.Name, a.Description, a.AppType, a.RouteRule, a.TargetURL, a.DocsURL, a.ConnectionString, a.NoAuth, id,
+	).Scan(&a.ID, &a.Enabled, &a.CreatedAt, &a.UpdatedAt)
+	if err == sql.ErrNoRows {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	if err != nil {
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+
+	// Redeploy sidecars if type changed or config changed
+	needsRedeploy := old.AppType != a.AppType || old.DocsURL != a.DocsURL || old.ConnectionString != a.ConnectionString
+	if needsRedeploy || a.AppType == "be" || a.AppType == "db" {
+		s.removeSidecar(context.Background(), App{Name: old.Name})
+	}
+	if a.AppType == "be" || a.AppType == "db" {
+		if err := s.deploySidecar(context.Background(), a); err != nil {
+			log.Printf("sidecar deploy %s: %v", a.Name, err)
+		}
+	}
+
+	s.writeAllRoutes()
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(a)
+}
+
+func (s *Server) deleteApp(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+
+	var name, appType string
+	s.db.QueryRow(`SELECT name, app_type FROM apps WHERE id = $1`, id).Scan(&name, &appType)
+	if name != "" && (appType == "be" || appType == "db") {
+		s.removeSidecar(context.Background(), App{Name: name})
+	}
+
+	result, err := s.db.Exec(`DELETE FROM apps WHERE id=$1`, id)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	n, _ := result.RowsAffected()
+	if n == 0 {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	s.writeAllRoutes()
+	w.WriteHeader(http.StatusNoContent)
+}
+
+type BackupTarget struct {
+	Name             string `json:"name"`
+	ConnectionString string `json:"connection_string"`
+}
+
+func (s *Server) backupTargets(w http.ResponseWriter, r *http.Request) {
+	token := r.Header.Get("X-Backup-Token")
+	if backupToken != "" && token != backupToken {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	rows, err := s.db.Query(`SELECT name, connection_string FROM apps WHERE app_type = 'db' AND enabled = true AND connection_string != ''`)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+
+	targets := []BackupTarget{}
+	for rows.Next() {
+		var t BackupTarget
+		if err := rows.Scan(&t.Name, &t.ConnectionString); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		n, _ := result.RowsAffected()
-		if n == 0 {
-			http.Error(w, "not found", http.StatusNotFound)
-			return
-		}
-		w.WriteHeader(http.StatusNoContent)
+		targets = append(targets, t)
 	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(targets)
 }
 
 func migrate(db *sql.DB) {
+	// Drop the old schema entirely
+	db.Exec("DROP TABLE IF EXISTS apps CASCADE")
+	db.Exec("DROP TABLE IF EXISTS backup_tracker CASCADE")
+
 	_, err := db.Exec(`
 		CREATE TABLE IF NOT EXISTS apps (
 			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 			name TEXT NOT NULL,
 			description TEXT DEFAULT '',
-			path_prefix TEXT NOT NULL UNIQUE,
-			port INTEGER NOT NULL,
-			app_type TEXT NOT NULL CHECK (app_type IN ('frontend', 'backend', 'db')),
-			technology TEXT DEFAULT '',
-			container_name TEXT DEFAULT '',
-			metadata JSONB DEFAULT '{}',
-			device_id TEXT NOT NULL DEFAULT 'local',
+			app_type TEXT NOT NULL CHECK (app_type IN ('fe', 'be', 'db')),
+			route_rule TEXT NOT NULL DEFAULT '',
+			target_url TEXT NOT NULL DEFAULT '',
+			docs_url TEXT NOT NULL DEFAULT '',
+			connection_string TEXT NOT NULL DEFAULT '',
+			no_auth BOOLEAN DEFAULT false,
 			enabled BOOLEAN DEFAULT true,
 			created_at TIMESTAMPTZ DEFAULT now(),
 			updated_at TIMESTAMPTZ DEFAULT now()

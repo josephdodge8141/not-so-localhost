@@ -1,0 +1,78 @@
+http:
+  middlewares:
+    auth:
+      chain:
+        middlewares:
+          - auth-error
+          - auth-check
+
+    auth-check:
+      forwardAuth:
+        address: "http://oauth2-proxy:4180/oauth2/auth"
+        authResponseHeaders:
+          - "X-Forwarded-User"
+          - "X-Forwarded-Email"
+          - "X-Forwarded-Preferred-Username"
+
+    auth-error:
+      errors:
+        status:
+          - "401-403"
+        service: oauth2-proxy-signin
+        query: "/"
+
+  routers:
+    oauth2-callback:
+      rule: "PathPrefix(`/oauth2`)"
+      priority: 100
+      entryPoints:
+        - web
+      service: oauth2-proxy
+
+    keycloak:
+      rule: "Host(`auth.joedodge.dev`)"
+      entryPoints:
+        - web
+      service: keycloak
+
+    registry:
+      rule: "Host(`apps.joedodge.dev`)"
+      entryPoints:
+        - web
+      middlewares:
+        - auth
+      service: registry
+
+    ttyd:
+      rule: "Host(`t.joedodge.dev`)"
+      entryPoints:
+        - web
+      middlewares:
+        - auth
+      service: ttyd
+
+  services:
+    keycloak:
+      loadBalancer:
+        servers:
+          - url: "http://keycloak:8080"
+
+    registry:
+      loadBalancer:
+        servers:
+          - url: "http://registry:7272"
+
+    ttyd:
+      loadBalancer:
+        servers:
+          - url: "http://host.docker.internal:7681"
+
+    oauth2-proxy:
+      loadBalancer:
+        servers:
+          - url: "http://oauth2-proxy:4180"
+
+    oauth2-proxy-signin:
+      loadBalancer:
+        servers:
+          - url: "http://oauth2-proxy:4180"

@@ -1,12 +1,7 @@
 services:
   postgres:
     image: postgres:16-alpine
-    environment:
-      POSTGRES_USER: admin
-      POSTGRES_PASSWORD: ${POSTGRES_ADMIN_PASSWORD}
-      TODO_DB_PASSWORD: ${TODO_DB_PASSWORD}
-      KEYCLOAK_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD}
-      REGISTRY_DB_PASSWORD: ${REGISTRY_DB_PASSWORD}
+    env_file: ./postgres/.env
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./postgres/init:/docker-entrypoint-initdb.d
@@ -21,17 +16,7 @@ services:
 
   keycloak:
     image: quay.io/keycloak/keycloak:latest
-    environment:
-      KC_HOSTNAME: https://auth.joedodge.dev
-      KC_HOSTNAME_STRICT: false
-      KC_HTTP_ENABLED: true
-      KC_PROXY_HEADERS: xforwarded
-      KC_DB: postgres
-      KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak
-      KC_DB_USERNAME: keycloak
-      KC_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD}
-      KEYCLOAK_ADMIN: admin
-      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
+    env_file: ./keycloak/.env
     command: start-dev
     networks:
       - edge
@@ -39,65 +24,6 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-    restart: unless-stopped
-
-  oauth2-proxy-ttyd:
-    image: quay.io/oauth2-proxy/oauth2-proxy:latest
-    command: >
-      --provider=keycloak-oidc
-      --client-id=ttyd
-      --client-secret=${OAUTH2_CLIENT_SECRET_TTYD}
-      --upstream=http://host.docker.internal:7681
-      --redirect-url=https://t.joedodge.dev/oauth2/callback
-      --oidc-issuer-url=http://keycloak:8080/realms/local
-      --login-url=https://auth.joedodge.dev/realms/local/protocol/openid-connect/auth
-      --redeem-url=http://keycloak:8080/realms/local/protocol/openid-connect/token
-      --oidc-jwks-url=http://keycloak:8080/realms/local/protocol/openid-connect/certs
-      --insecure-oidc-skip-issuer-verification
-      --skip-oidc-discovery
-      --refresh=5m
-      --cookie-secret=${OAUTH2_COOKIE_SECRET}
-      --email-domain=*
-      --http-address=0.0.0.0:4180
-    networks:
-      - edge
-    depends_on:
-      - keycloak
-    restart: unless-stopped
-
-  oauth2-proxy-homarr:
-    image: quay.io/oauth2-proxy/oauth2-proxy:latest
-    command: >
-      --provider=keycloak-oidc
-      --client-id=homarr
-      --client-secret=${OAUTH2_CLIENT_SECRET_HOMARR}
-      --upstream=http://homarr:3000
-      --redirect-url=https://home.joedodge.dev/oauth2/callback
-      --oidc-issuer-url=http://keycloak:8080/realms/local
-      --login-url=https://auth.joedodge.dev/realms/local/protocol/openid-connect/auth
-      --redeem-url=http://keycloak:8080/realms/local/protocol/openid-connect/token
-      --oidc-jwks-url=http://keycloak:8080/realms/local/protocol/openid-connect/certs
-      --insecure-oidc-skip-issuer-verification
-      --skip-oidc-discovery
-      --refresh=5m
-      --cookie-secret=${OAUTH2_COOKIE_SECRET}
-      --email-domain=*
-      --http-address=0.0.0.0:4181
-    networks:
-      - edge
-    depends_on:
-      - keycloak
-    restart: unless-stopped
-
-  caddy:
-    image: caddy:alpine
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
-    networks:
-      - edge
     restart: unless-stopped
 
   terminal:
@@ -111,104 +37,73 @@ services:
 
   registry:
     build: ./registry
-    environment:
-      DATABASE_URL: postgres://registry:${REGISTRY_DB_PASSWORD}@postgres:5432/registry?sslmode=disable
-      PGWEB_ALLOWED_EMAIL: ${PGWEB_ALLOWED_EMAIL}
-    depends_on:
-      postgres:
-        condition: service_healthy
-    networks:
-      - edge
-      - internal
-    restart: unless-stopped
-
-  oauth2-proxy-registry:
-    image: quay.io/oauth2-proxy/oauth2-proxy:latest
-    command: >
-      --provider=keycloak-oidc
-      --client-id=registry
-      --client-secret=${OAUTH2_CLIENT_SECRET_REGISTRY}
-      --upstream=http://registry:7272
-      --redirect-url=https://apps.joedodge.dev/oauth2/callback
-      --oidc-issuer-url=http://keycloak:8080/realms/local
-      --login-url=https://auth.joedodge.dev/realms/local/protocol/openid-connect/auth
-      --redeem-url=http://keycloak:8080/realms/local/protocol/openid-connect/token
-      --oidc-jwks-url=http://keycloak:8080/realms/local/protocol/openid-connect/certs
-      --insecure-oidc-skip-issuer-verification
-      --skip-oidc-discovery
-      --refresh=5m
-      --cookie-secret=${OAUTH2_COOKIE_SECRET}
-      --email-domain=*
-      --http-address=0.0.0.0:4182
-    networks:
-      - edge
-    depends_on:
-      - keycloak
-    restart: unless-stopped
-
-  pgweb:
-    image: sosedoff/pgweb:latest
-    environment:
-      DATABASE_URL: postgres://admin:${POSTGRES_ADMIN_PASSWORD}@postgres:5432/postgres?sslmode=disable
-    depends_on:
-      postgres:
-        condition: service_healthy
-    networks:
-      - internal
-    restart: unless-stopped
-
-  todo:
-    build: ../my-todo
-    environment:
-      DATABASE_URL: postgres://todo:${TODO_DB_PASSWORD}@postgres:5432/todo
-    depends_on:
-      postgres:
-        condition: service_healthy
-    networks:
-      - edge
-      - internal
-    restart: unless-stopped
-
-  homarr:
-    image: ghcr.io/homarr-labs/homarr:latest
-    env_file: ./homarr/.env
+    env_file: ./registry/.env
     volumes:
-      - ./homarr/appdata:/appdata
+      - /var/run/docker.sock:/var/run/docker.sock:rw
+      - ./traefik/dynamic:/traefik-routes:rw
+    depends_on:
+      postgres:
+        condition: service_healthy
     environment:
-      - DISABLE_ANALYTICS=true
+      TRAEFIK_ROUTES_DIR: /traefik-routes
     networks:
       - edge
+      - internal
     restart: unless-stopped
 
   backup:
     build: ./backup
-    environment:
-      DATABASE_URL: postgres://registry:${REGISTRY_DB_PASSWORD}@postgres:5432/registry
-      REGISTRY_URL: http://registry:7272
-      BACKUP_INTERVAL: ${BACKUP_INTERVAL:-1h}
-      BACKUP_S3_BUCKET: ${BACKUP_S3_BUCKET}
-      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
-      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
-      AWS_REGION: ${AWS_REGION:-us-east-1}
-      KEYCLOAK_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD}
-      REGISTRY_DB_PASSWORD: ${REGISTRY_DB_PASSWORD}
-      POSTGRES_ADMIN_PASSWORD: ${POSTGRES_ADMIN_PASSWORD}
+    env_file: ./backup/.env
     networks:
       - edge
       - internal
     depends_on:
       - postgres
       - registry
+    volumes:
+      - backup_data:${BACKUP_DIR:-/backups}
     restart: unless-stopped
 
   cloudflared:
     image: cloudflare/cloudflared:latest
     env_file: ./cloudflared/.env
-    command: tunnel --config /etc/cloudflared/config.yml run
+    command: tunnel --protocol http2 --config /etc/cloudflared/config.yml run
     volumes:
       - ./cloudflared:/etc/cloudflared
     depends_on:
-      - caddy
+      - traefik
+    networks:
+      - edge
+    restart: unless-stopped
+
+  traefik:
+    image: traefik:v3.1
+    command:
+      - "--configFile=/etc/traefik/traefik.yml"
+    ports:
+      - "80:80"
+    volumes:
+      - ./traefik:/etc/traefik:ro
+    networks:
+      - edge
+    restart: unless-stopped
+
+  oauth2-proxy:
+    image: quay.io/oauth2-proxy/oauth2-proxy:latest
+    env_file: ./oauth2-proxy/.env
+    command:
+      - "--provider=keycloak-oidc"
+      - "--oidc-issuer-url=http://keycloak:8080/realms/local"
+      - "--login-url=https://auth.joedodge.dev/realms/local/protocol/openid-connect/auth"
+      - "--redeem-url=http://keycloak:8080/realms/local/protocol/openid-connect/token"
+      - "--oidc-jwks-url=http://keycloak:8080/realms/local/protocol/openid-connect/certs"
+      - "--insecure-oidc-skip-issuer-verification"
+      - "--skip-oidc-discovery"
+      - "--email-domain=*"
+      - "--http-address=0.0.0.0:4180"
+      - "--cookie-domain=.joedodge.dev"
+    depends_on:
+      - keycloak
     networks:
       - edge
     restart: unless-stopped
@@ -216,6 +111,7 @@ services:
 volumes:
   terminal_data:
   postgres_data:
+  backup_data:
 
 networks:
   edge:

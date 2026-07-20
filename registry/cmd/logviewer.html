@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Container Logs</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{--bg:#0f172a;--surface:#1e293b;--surface2:#334155;--border:#475569;--text:#f1f5f9;--muted:#94a3b8;--primary:#3b82f6;--radius:8px}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
+.header{background:var(--surface);border-bottom:1px solid var(--border);padding:12px 24px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px}
+.header h1{font-size:1.1rem;font-weight:600}
+.header h1 span{color:var(--primary)}
+.btn{padding:6px 14px;border-radius:var(--radius);border:none;cursor:pointer;font-size:.8125rem;font-weight:500;transition:background .15s}
+.btn-primary{background:var(--primary);color:#fff}
+.btn-primary:hover{background:#2563eb}
+.btn-outline{background:transparent;border:1px solid var(--border);color:var(--text)}
+.btn-outline:hover{background:var(--surface2)}
+.content{padding:16px 24px}
+pre{background:#020617;border:1px solid var(--border);border-radius:var(--radius);padding:16px;font-size:.75rem;line-height:1.5;overflow:auto;max-height:80vh;white-space:pre-wrap;word-break:break-all;color:#e2e8f0}
+pre .ts{color:#64748b}
+.status{color:var(--muted);font-size:.8125rem;margin-bottom:8px}
+.error{color:#ef4444}
+.empty{text-align:center;padding:48px;color:var(--muted)}
+.hidden{display:none!important}
+</style>
+</head>
+<body>
+<div class="header">
+  <h1><span id="appName">Logs</span></h1>
+  <div style="display:flex;gap:8px">
+    <span class="status" id="status">loading...</span>
+    <button class="btn btn-outline" onclick="toggleAutoRefresh()" id="autoBtn">Auto: on</button>
+    <button class="btn btn-primary" onclick="fetchLogs()">Refresh</button>
+  </div>
+</div>
+<div class="content">
+  <pre id="logOutput" class="empty">Loading logs...</pre>
+</div>
+
+<script>
+const appId = window.location.pathname.match(/\/logs\/(.+)/)?.[1];
+let autoRefresh = true;
+let autoTimer = null;
+
+async function fetchApp() {
+  const res = await fetch('/api/apps/' + appId);
+  if (!res.ok) return;
+  const app = await res.json();
+  document.getElementById('appName').textContent = app.name + ' logs';
+  document.title = app.name + ' logs';
+}
+
+async function fetchLogs() {
+  const pre = document.getElementById('logOutput');
+  const status = document.getElementById('status');
+  pre.classList.remove('error');
+  status.textContent = 'fetching...';
+  try {
+    const res = await fetch('/api/apps/' + appId + '/logs');
+    if (!res.ok) {
+      const text = await res.text();
+      pre.className = 'error';
+      pre.textContent = res.status + ': ' + text;
+      status.textContent = 'error';
+      return;
+    }
+    const text = await res.text();
+    if (!text.trim()) {
+      pre.className = '';
+      pre.innerHTML = '<span style="color:var(--muted)">No log output</span>';
+    } else {
+      pre.className = '';
+      pre.textContent = text;
+    }
+    const now = new Date();
+    status.textContent = 'updated ' + now.toLocaleTimeString() + ' (' + text.split('\n').filter(Boolean).length + ' lines)';
+    pre.scrollTop = pre.scrollHeight;
+  } catch (e) {
+    pre.className = 'error';
+    pre.textContent = 'Failed to fetch logs: ' + e.message;
+    status.textContent = 'error';
+  }
+}
+
+function toggleAutoRefresh() {
+  autoRefresh = !autoRefresh;
+  document.getElementById('autoBtn').textContent = 'Auto: ' + (autoRefresh ? 'on' : 'off');
+  if (autoRefresh) {
+    startAutoRefresh();
+  } else {
+    clearInterval(autoTimer);
+  }
+}
+
+function startAutoRefresh() {
+  clearInterval(autoTimer);
+  autoTimer = setInterval(fetchLogs, 10000);
+}
+
+fetchApp();
+fetchLogs();
+startAutoRefresh();
+</script>
+</body>
+</html>

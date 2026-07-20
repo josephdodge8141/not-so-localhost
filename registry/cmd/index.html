@@ -121,6 +121,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
         <input type="text" id="connection_string" placeholder="postgres://user:pass@host:5432/db">
       </div>
       <div class="form-group">
+        <label for="container_name">Container Name <span class="muted">(leave blank to infer from URL)</span></label>
+        <input type="text" id="container_name" placeholder="Auto-inferred from target URL">
+      </div>
+      <div class="form-group">
         <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
           <input type="checkbox" id="no_auth" style="width:auto">
           Bypass authentication
@@ -191,6 +195,7 @@ function renderApps() {
       </div>
       <div class="card-actions">
         <a href="${openUrl}" target="_blank" class="btn btn-sm btn-primary">Open →</a>
+        <a href="/logs/${app.id}" target="_blank" class="btn btn-sm btn-outline">Logs</a>
         <button class="btn btn-sm btn-outline" onclick="editApp('${app.id}')">Edit</button>
         <button class="btn btn-sm btn-danger" onclick="deleteApp('${app.id}')">Delete</button>
       </div>
@@ -218,6 +223,7 @@ function showForm(app) {
     document.getElementById('target_url').value = app.target_url || '';
     document.getElementById('docs_url').value = app.docs_url || '';
     document.getElementById('connection_string').value = '';
+    document.getElementById('container_name').value = app.container_name || '';
     document.getElementById('no_auth').checked = app.no_auth;
   } else {
     document.getElementById('formTitle').textContent = 'Register App';
@@ -257,6 +263,7 @@ async function submitForm(e) {
     description: document.getElementById('description').value,
     app_type: appType,
     route_rule: document.getElementById('route_rule').value,
+    container_name: document.getElementById('container_name').value,
     no_auth: document.getElementById('no_auth').checked,
   };
   if (appType === 'fe') body.target_url = document.getElementById('target_url').value;

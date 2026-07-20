@@ -9,6 +9,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -20,6 +21,7 @@ import (
 	"github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/api/types/network"
 	"github.com/docker/docker/client"
+	"github.com/docker/docker/pkg/stdcopy"
 	"github.com/lib/pq"
 )
 
@@ -29,7 +31,7 @@ var (
 	backupToken      = os.Getenv("BACKUP_TOKEN")
 )
 
-//go:embed index.html
+//go:embed index.html logviewer.html
 var frontend embed.FS
 
 type App struct {
@@ -41,6 +43,7 @@ type App struct {
 	TargetURL        string    `json:"target_url,omitempty"`
 	DocsURL          string    `json:"docs_url,omitempty"`
 	ConnectionString string    `json:"connection_string,omitempty"`
+	ContainerName    string    `json:"container_name"`
 	NoAuth           bool      `json:"no_auth"`
 	Enabled          bool      `json:"enabled"`
 	CreatedAt        time.Time `json:"created_at"`
@@ -77,8 +80,11 @@ func main() {
 	mux.HandleFunc("/{$}", serveFrontend)
 	mux.HandleFunc("GET /api/apps", serv.listApps)
 	mux.HandleFunc("POST /api/apps", serv.createApp)
+	mux.HandleFunc("GET /api/apps/{id}", serv.getApp)
 	mux.HandleFunc("PUT /api/apps/{id}", serv.updateApp)
 	mux.HandleFunc("DELETE /api/apps/{id}", serv.deleteApp)
+	mux.HandleFunc("GET /api/apps/{id}/logs", serv.getAppLogs)
+	mux.HandleFunc("GET /logs/{id}", serveLogViewer)
 	mux.HandleFunc("GET /internal/backup-targets", serv.backupTargets)
 
 	log.Println("registry on :7272")
@@ -163,7 +169,7 @@ func (s *Server) writeRouteFile(apps []App) {
 }
 
 func (s *Server) writeAllRoutes() {
-	rows, err := s.db.Query(`SELECT id, name, COALESCE(description,''), app_type, COALESCE(route_rule,''), COALESCE(target_url,''), COALESCE(docs_url,''), no_auth, enabled, created_at, updated_at FROM apps WHERE enabled = true`)
+	rows, err := s.db.Query(`SELECT id, name, COALESCE(description,''), app_type, COALESCE(route_rule,''), COALESCE(target_url,''), COALESCE(docs_url,''), COALESCE(container_name,''), no_auth, enabled, created_at, updated_at FROM apps WHERE enabled = true`)
 	if err != nil {
 		log.Printf("writeAllRoutes query: %v", err)
 		return
@@ -173,7 +179,7 @@ func (s *Server) writeAllRoutes() {
 	var apps []App
 	for rows.Next() {
 		var a App
-		if err := rows.Scan(&a.ID, &a.Name, &a.Description, &a.AppType, &a.RouteRule, &a.TargetURL, &a.DocsURL, &a.NoAuth, &a.Enabled, &a.CreatedAt, &a.UpdatedAt); err != nil {
+		if err := rows.Scan(&a.ID, &a.Name, &a.Description, &a.AppType, &a.RouteRule, &a.TargetURL, &a.DocsURL, &a.ContainerName, &a.NoAuth, &a.Enabled, &a.CreatedAt, &a.UpdatedAt); err != nil {
 			log.Printf("writeAllRoutes scan: %v", err)
 			continue
 		}
@@ -317,7 +323,7 @@ func (s *Server) listApps(w http.ResponseWriter, r *http.Request) {
 		err  error
 	)
 	appType := r.URL.Query().Get("type")
-	q := `SELECT id, name, COALESCE(description,''), app_type, COALESCE(route_rule,''), COALESCE(target_url,''), COALESCE(docs_url,''), no_auth, enabled, created_at, updated_at, connection_string != '' FROM apps`
+	q := `SELECT id, name, COALESCE(description,''), app_type, COALESCE(route_rule,''), COALESCE(target_url,''), COALESCE(docs_url,''), COALESCE(container_name,''), no_auth, enabled, created_at, updated_at, connection_string != '' FROM apps`
 	if appType != "" {
 		rows, err = s.db.Query(q+" WHERE app_type = $1 ORDER BY name", appType)
 	} else {
@@ -330,23 +336,24 @@ func (s *Server) listApps(w http.ResponseWriter, r *http.Request) {
 	defer rows.Close()
 
 	type safeApp struct {
-		ID          string    `json:"id"`
-		Name        string    `json:"name"`
-		Description string    `json:"description"`
-		AppType     string    `json:"app_type"`
-		RouteRule   string    `json:"route_rule"`
-		TargetURL   string    `json:"target_url"`
-		DocsURL     string    `json:"docs_url"`
-		NoAuth      bool      `json:"no_auth"`
-		Enabled     bool      `json:"enabled"`
-		CreatedAt   time.Time `json:"created_at"`
-		UpdatedAt   time.Time `json:"updated_at"`
-		HasDB       bool      `json:"has_db"`
+		ID            string    `json:"id"`
+		Name          string    `json:"name"`
+		Description   string    `json:"description"`
+		AppType       string    `json:"app_type"`
+		RouteRule     string    `json:"route_rule"`
+		TargetURL     string    `json:"target_url"`
+		DocsURL       string    `json:"docs_url"`
+		ContainerName string    `json:"container_name"`
+		NoAuth        bool      `json:"no_auth"`
+		Enabled       bool      `json:"enabled"`
+		CreatedAt     time.Time `json:"created_at"`
+		UpdatedAt     time.Time `json:"updated_at"`
+		HasDB         bool      `json:"has_db"`
 	}
 	apps := []safeApp{}
 	for rows.Next() {
 		var a safeApp
-		if err := rows.Scan(&a.ID, &a.Name, &a.Description, &a.AppType, &a.RouteRule, &a.TargetURL, &a.DocsURL, &a.NoAuth, &a.Enabled, &a.CreatedAt, &a.UpdatedAt, &a.HasDB); err != nil {
+		if err := rows.Scan(&a.ID, &a.Name, &a.Description, &a.AppType, &a.RouteRule, &a.TargetURL, &a.DocsURL, &a.ContainerName, &a.NoAuth, &a.Enabled, &a.CreatedAt, &a.UpdatedAt, &a.HasDB); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
@@ -394,12 +401,15 @@ func (s *Server) createApp(w http.ResponseWriter, r *http.Request) {
 			a.RouteRule = fmt.Sprintf("Host(`%s.joedodge.dev`)", sn)
 		}
 	}
+	if a.ContainerName == "" {
+		a.ContainerName = inferContainerName(a)
+	}
 
 	err := s.db.QueryRow(
-		`INSERT INTO apps (name, description, app_type, route_rule, target_url, docs_url, connection_string, no_auth)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		`INSERT INTO apps (name, description, app_type, route_rule, target_url, docs_url, connection_string, container_name, no_auth)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 		 RETURNING id, enabled, created_at, updated_at`,
-		a.Name, a.Description, a.AppType, a.RouteRule, a.TargetURL, a.DocsURL, a.ConnectionString, a.NoAuth,
+		a.Name, a.Description, a.AppType, a.RouteRule, a.TargetURL, a.DocsURL, a.ConnectionString, a.ContainerName, a.NoAuth,
 	).Scan(&a.ID, &a.Enabled, &a.CreatedAt, &a.UpdatedAt)
 	if err != nil {
 		if pqErr, ok := err.(*pq.Error); ok && pqErr.Code == "23505" {
@@ -427,7 +437,7 @@ func (s *Server) updateApp(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 
 	var old App
-	err := s.db.QueryRow(`SELECT id, name, app_type, COALESCE(target_url,''), COALESCE(docs_url,''), COALESCE(connection_string,'') FROM apps WHERE id = $1`, id).Scan(&old.ID, &old.Name, &old.AppType, &old.TargetURL, &old.DocsURL, &old.ConnectionString)
+	err := s.db.QueryRow(`SELECT id, name, app_type, COALESCE(target_url,''), COALESCE(docs_url,''), COALESCE(connection_string,''), COALESCE(container_name,'') FROM apps WHERE id = $1`, id).Scan(&old.ID, &old.Name, &old.AppType, &old.TargetURL, &old.DocsURL, &old.ConnectionString, &old.ContainerName)
 	if err == sql.ErrNoRows {
 		http.Error(w, "not found", http.StatusNotFound)
 		return
@@ -466,11 +476,14 @@ func (s *Server) updateApp(w http.ResponseWriter, r *http.Request) {
 			a.RouteRule = fmt.Sprintf("Host(`%s.joedodge.dev`)", sn)
 		}
 	}
+	if a.ContainerName == "" {
+		a.ContainerName = inferContainerName(a)
+	}
 
 	err = s.db.QueryRow(
-		`UPDATE apps SET name=$1, description=$2, app_type=$3, route_rule=$4, target_url=$5, docs_url=$6, connection_string=$7, no_auth=$8, updated_at=now()
-		 WHERE id=$9 RETURNING id, enabled, created_at, updated_at`,
-		a.Name, a.Description, a.AppType, a.RouteRule, a.TargetURL, a.DocsURL, a.ConnectionString, a.NoAuth, id,
+		`UPDATE apps SET name=$1, description=$2, app_type=$3, route_rule=$4, target_url=$5, docs_url=$6, connection_string=$7, container_name=$8, no_auth=$9, updated_at=now()
+		 WHERE id=$10 RETURNING id, enabled, created_at, updated_at`,
+		a.Name, a.Description, a.AppType, a.RouteRule, a.TargetURL, a.DocsURL, a.ConnectionString, a.ContainerName, a.NoAuth, id,
 	).Scan(&a.ID, &a.Enabled, &a.CreatedAt, &a.UpdatedAt)
 	if err == sql.ErrNoRows {
 		http.Error(w, "not found", http.StatusNotFound)
@@ -554,28 +567,89 @@ func (s *Server) backupTargets(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(targets)
 }
 
-func migrate(db *sql.DB) {
-	// Drop the old schema entirely
-	db.Exec("DROP TABLE IF EXISTS apps CASCADE")
-	db.Exec("DROP TABLE IF EXISTS backup_tracker CASCADE")
-
-	_, err := db.Exec(`
-		CREATE TABLE IF NOT EXISTS apps (
-			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-			name TEXT NOT NULL,
-			description TEXT DEFAULT '',
-			app_type TEXT NOT NULL CHECK (app_type IN ('fe', 'be', 'db')),
-			route_rule TEXT NOT NULL DEFAULT '',
-			target_url TEXT NOT NULL DEFAULT '',
-			docs_url TEXT NOT NULL DEFAULT '',
-			connection_string TEXT NOT NULL DEFAULT '',
-			no_auth BOOLEAN DEFAULT false,
-			enabled BOOLEAN DEFAULT true,
-			created_at TIMESTAMPTZ DEFAULT now(),
-			updated_at TIMESTAMPTZ DEFAULT now()
-		)
-	`)
-	if err != nil {
-		log.Fatal("migration:", err)
+func inferContainerName(a App) string {
+	switch a.AppType {
+	case "fe":
+		if a.TargetURL != "" {
+			u, err := url.Parse(a.TargetURL)
+			if err == nil && u.Hostname() != "" {
+				return u.Hostname()
+			}
+		}
+	case "be":
+		if a.DocsURL != "" {
+			u, err := url.Parse(a.DocsURL)
+			if err == nil && u.Hostname() != "" {
+				return u.Hostname()
+			}
+		}
 	}
+	return sanitizeName(a.Name) + "-app"
+}
+
+func (s *Server) getApp(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+
+	var a App
+	err := s.db.QueryRow(`SELECT id, name, COALESCE(description,''), app_type, COALESCE(route_rule,''), COALESCE(target_url,''), COALESCE(docs_url,''), COALESCE(container_name,''), no_auth, enabled, created_at, updated_at FROM apps WHERE id = $1`, id).Scan(&a.ID, &a.Name, &a.Description, &a.AppType, &a.RouteRule, &a.TargetURL, &a.DocsURL, &a.ContainerName, &a.NoAuth, &a.Enabled, &a.CreatedAt, &a.UpdatedAt)
+	if err == sql.ErrNoRows {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(a)
+}
+
+func (s *Server) getAppLogs(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+
+	var containerName string
+	err := s.db.QueryRow(`SELECT COALESCE(container_name,'') FROM apps WHERE id = $1`, id).Scan(&containerName)
+	if err == sql.ErrNoRows {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if containerName == "" {
+		http.Error(w, "container_name not set", http.StatusNotFound)
+		return
+	}
+
+	opts := container.LogsOptions{
+		ShowStdout: true,
+		ShowStderr: true,
+		Tail:       "200",
+		Timestamps: true,
+	}
+	reader, err := s.docker.ContainerLogs(r.Context(), containerName, opts)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer reader.Close()
+
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	stdcopy.StdCopy(w, w, reader)
+}
+
+func serveLogViewer(w http.ResponseWriter, r *http.Request) {
+	data, err := frontend.ReadFile("logviewer.html")
+	if err != nil {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Write(data)
+}
+
+func migrate(db *sql.DB) {
+	db.Exec("ALTER TABLE apps ADD COLUMN IF NOT EXISTS container_name TEXT NOT NULL DEFAULT ''")
 }

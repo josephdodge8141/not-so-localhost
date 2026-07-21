@@ -38,3 +38,8 @@ func (s *FileStore) Load(ctx context.Context, key string) (io.ReadCloser, error)
 	path := filepath.Join(s.baseDir, key)
 	return os.Open(path)
 }
+
+func (s *FileStore) DeletePrefix(ctx context.Context, prefix string) error {
+	path := filepath.Join(s.baseDir, prefix)
+	return os.RemoveAll(path)
+}

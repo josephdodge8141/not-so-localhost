@@ -78,10 +78,11 @@ docker build -t backup ./backup
 
 - Port: `:7273`
 - Endpoints: `GET /api/backups`, `POST /api/backups/{db}/backup`, `POST /api/backups/{db}/restore`
-- Hardcoded DBs: `keycloak`, `registry`
-- Discovered DBs: fetched from registry API (`GET /api/apps?type=db`)
-- S3 path: `s3://<bucket>/backups/<dbname>/<timestamp>.sql.gz`
+- Hardcoded DBs: `keycloak`, `registry` (keyed by name)
+- Discovered DBs: fetched from registry API (`GET /internal/backup-targets`), keyed by app UUID
+- S3 path: `s3://<bucket>/backups/<uuid-or-name>/<timestamp>.sql.gz`
 - Interval: configurable via `BACKUP_INTERVAL` (default `1h`)
+- Stale backups: apps deleted from registry have their backups pruned after `STALE_BACKUP_DAYS` (default 30). The `POST /api/backups/{db}/restore` endpoint refuses restore for stale orphaned backups and deletes them instead.
 - `POSTGRES_ADMIN_PASSWORD` must be set for the restore endpoint — it drops and recreates the target DB as the `postgres` superuser. Restore returns 500 without it.
 
 ### S3 Bucket Setup
@@ -101,7 +102,7 @@ IAM policy (minimal) for backup service credentials:
   "Statement": [
     {
       "Effect": "Allow",
-      "Action": ["s3:PutObject", "s3:GetObject", "s3:ListBucket"],
+      "Action": ["s3:PutObject", "s3:GetObject", "s3:DeleteObject", "s3:ListBucket"],
       "Resource": [
         "arn:aws:s3:::not-so-localhost-backups",
         "arn:aws:s3:::not-so-localhost-backups/backups/*"

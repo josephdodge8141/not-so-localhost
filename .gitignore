@@ -10,3 +10,4 @@ cloudflared/cert.pem
 traefik/dynamic/infra.yml
 traefik/dynamic/managed.yml
 .serena/
+cloudflared/ca-bundle.pem

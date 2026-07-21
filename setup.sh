@@ -14,4 +14,9 @@ for tmpl in traefik/dynamic/infra.yml.tmpl cloudflared/config.yml.tmpl; do
   sed "s/\${DOMAIN}/$DOMAIN/g" "$tmpl" > "$out"
 done
 
+# Generate CA bundle (system certs + corporate proxy if detected)
+printf '  cloudflared/ca-bundle.pem\n'
+(security export -t certs -f pemseq -k /Library/Keychains/System.keychain 2>/dev/null
+ security find-certificate -a -p -c "NICE" 2>/dev/null) > cloudflared/ca-bundle.pem
+
 echo "done. run 'docker compose up -d'"

@@ -1,7 +1,5 @@
 FROM golang:alpine AS builder
 RUN apk add --no-cache ca-certificates
-RUN --mount=type=secret,id=ca-bundle,required=false \
-    if [ -f /run/secrets/ca-bundle ]; then cat /run/secrets/ca-bundle >> /etc/ssl/cert.pem; fi
 WORKDIR /app
 COPY go.mod go.sum ./
 RUN go mod download

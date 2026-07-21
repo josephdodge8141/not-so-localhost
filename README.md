@@ -1,13 +1,14 @@
 # Not-So-Localhost
 
-Local services accessible anywhere via Cloudflare Tunnel, with Keycloak authentication.
+Local services accessible anywhere via Cloudflare Tunnel, with Keycloak authentication and Traefik routing.
 
 ## Prerequisites
 
-- [ttyd](https://github.com/tsl0922/ttyd) — `brew install ttyd && brew services start ttyd`
 - Docker + Docker Compose
-- Cloudflare Tunnel credentials in `cloudflared/`
-- Copy `.env.example` to `.env` and fill in secrets
+- [ttyd](https://github.com/tsl0922/ttyd) on macOS — `brew install ttyd && brew services start ttyd`
+- Cloudflare Tunnel login (`cloudflared tunnel login`) and credentials in `cloudflared/`
+- Copy `.env.example` to `.env` in each service directory and fill in secrets
+- AWS credentials for S3 backup (`backup/.env`)
 
 ## Quick Start
 
@@ -15,32 +16,38 @@ Local services accessible anywhere via Cloudflare Tunnel, with Keycloak authenti
 docker compose up -d
 ```
 
-ttyd must be running separately (`brew services start ttyd`) for terminal access.
+ttyd must be running separately on the macOS host (`brew services start ttyd`) for web terminal access at `t.joedodge.dev`.
+
+## Architecture
+
+```
+Cloudflare Tunnel → Traefik:80
+  ├── auth.joedodge.dev  → keycloak:8080
+  ├── t.joedodge.dev     → oauth2-proxy → host.docker.internal:7681 (ttyd)
+  ├── apps.joedodge.dev  → oauth2-proxy → registry:7272
+  └── *.joedodge.dev     → oauth2-proxy → registry:7272 (catchall)
+```
+
+- Cloudflare Tunnel terminates TLS and forwards to Traefik on port 80.
+- Traefik uses the file provider with dynamic config in `traefik/dynamic/`.
+- oauth2-proxy provides forward-auth middleware; protected routes authenticate via Keycloak.
+- Wildcard DNS `*.joedodge.dev` is routed through Cloudflare Tunnel (`cloudflared tunnel route dns`).
+- ttyd runs natively on macOS (not in Docker) because macOS disables SSH Remote Login; Traefik proxies to `host.docker.internal:7681`.
+- A Dropbear SSH server (`terminal` service) runs in Docker on port 2222 for SSH-based terminal access.
 
 ## Hostnames
 
 | Hostname | Service | Auth |
 |----------|---------|------|
-| `joedodge.dev` | Hello World | No |
-| `home.joedodge.dev` | Homarr dashboard | Yes (Keycloak) |
-| `t.joedodge.dev` | ttyd (Mac shell) | Yes (Keycloak) |
-| `apps.joedodge.dev` | App Registry | Yes (Keycloak) |
-| `auth.joedodge.dev` | Keycloak admin | N/A |
+| `auth.joedodge.dev` | Keycloak admin console | N/A |
+| `t.joedodge.dev` | ttyd (Mac shell via oauth2-proxy) | Required |
+| `apps.joedodge.dev` | App Registry (via oauth2-proxy) | Required |
+| `*.joedodge.dev` | Catchall — App Registry (via oauth2-proxy) | Required |
 
-## Architecture
+## Adding a New App
 
-```
-Cloudflare Tunnel → Caddy:80
-  ├── joedodge.dev      → respond "Hello World!"
-  ├── auth.joedodge.dev → keycloak:8080
-  ├── t.joedodge.dev    → oauth2-proxy-ttyd:4180   → ttyd (localhost:7681)
-  ├── home.joedodge.dev → oauth2-proxy-homarr:4181 → homarr:3000
-  ├── apps.joedodge.dev → oauth2-proxy-registry:4182 → registry:7272
-  └── /todo/*           → todo:3000
-```
+Register the app at the Registry dashboard (`apps.joedodge.dev`). The Registry writes the Traefik route to `traefik/dynamic/managed.yml` automatically. No code changes, tunnel edits, or Docker Compose modifications needed.
 
-ttyd runs natively on macOS (not in Docker) because macOS disables SSH Remote Login.
+## Backup
 
-## Adding a New Service
-
-Add to `docker-compose.yml`, add a route to `Caddyfile`. No tunnel or DNS changes needed — `*.joedodge.dev` wildcard handles all subdomains.
+The `backup` service dumps registered databases to S3 on a schedule. Configure AWS credentials and bucket in `backup/.env`.

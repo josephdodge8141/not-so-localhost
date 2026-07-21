@@ -51,20 +51,6 @@ type HardcodedDB struct {
 	DBName   string
 }
 
-type DBApp struct {
-	Name          string `json:"name"`
-	ContainerName string `json:"container_name"`
-	Metadata      string `json:"metadata"`
-}
-
-type parsedMetadata struct {
-	DBType string `json:"db_type"`
-	DBName string `json:"db_name"`
-	DBUser string `json:"db_user"`
-	DBHost string `json:"db_host"`
-	DBPort int    `json:"db_port"`
-}
-
 type BackupRecord struct {
 	DBName        string     `json:"db_name"`
 	DBUser        string     `json:"db_user"`

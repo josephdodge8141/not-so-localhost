@@ -15,6 +15,20 @@ services:
       retries: 5
     restart: unless-stopped
 
+  config-gen:
+    image: alpine:latest
+    command:
+      - sh
+      - -c
+      - |
+        apk add --no-cache gettext
+        envsubst '$${DOMAIN}' < /work/traefik/dynamic/infra.yml.tmpl > /work/traefik/dynamic/infra.yml
+        envsubst '$${DOMAIN}' < /work/cloudflared/config.yml.tmpl > /work/cloudflared/config.yml
+    environment:
+      DOMAIN: ${DOMAIN}
+    volumes:
+      - .:/work
+
   keycloak:
     image: quay.io/keycloak/keycloak:latest
     env_file: ./keycloak/.env
@@ -72,7 +86,10 @@ services:
     volumes:
       - ./cloudflared:/etc/cloudflared
     depends_on:
-      - traefik
+      traefik:
+        condition: service_started
+      config-gen:
+        condition: service_completed_successfully
     networks:
       - edge
     restart: unless-stopped
@@ -85,6 +102,9 @@ services:
       - "80:80"
     volumes:
       - ./traefik:/etc/traefik:ro
+    depends_on:
+      config-gen:
+        condition: service_completed_successfully
     networks:
       - edge
     restart: unless-stopped

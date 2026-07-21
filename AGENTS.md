@@ -59,18 +59,6 @@ From personal WiFi/cellular (not corp network):
 
 The `backup/` service periodically pg_dumps registered databases to S3.
 
-### Building
-
-If behind a corporate SSL-inspecting proxy, generate the CA bundle before Docker build:
-```bash
-security export -t certs -f pemseq -k /Library/Keychains/System.keychain > backup/ca-bundle.pem
-docker build --secret id=ca-bundle,src=backup/ca-bundle.pem -t backup ./backup
-```
-Without a corporate proxy, build normally (the secret mount is optional):
-```bash
-docker build -t backup ./backup
-```
-
 - Port: `:7273`
 - Endpoints: `GET /api/backups`, `POST /api/backups/{db}/backup`, `POST /api/backups/{db}/restore`
 - Hardcoded DBs: `keycloak`, `registry` (keyed by name)

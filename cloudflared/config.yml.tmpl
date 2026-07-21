@@ -2,6 +2,6 @@ tunnel: 5108efd2-f8b8-465e-b917-954909136af7
 credentials-file: /etc/cloudflared/5108efd2-f8b8-465e-b917-954909136af7.json
 
 ingress:
-  - hostname: "*.your-domain.example.com"
+  - hostname: "*.${DOMAIN}"
     service: http://traefik:80
   - service: http_status:404

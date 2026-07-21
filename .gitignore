@@ -1,9 +1,12 @@
 .env
 cloudflared/.env
 cloudflared/*.json
+cloudflared/config.yml
 homarr/.env
 homarr/appdata/
 */node_modules/
 backup/ca-bundle.pem
 registry/registry
 cloudflared/cert.pem
+traefik/dynamic/infra.yml
+traefik/dynamic/managed.yml

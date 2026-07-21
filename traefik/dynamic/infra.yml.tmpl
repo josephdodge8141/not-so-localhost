@@ -30,14 +30,14 @@ http:
       service: oauth2-proxy
 
     keycloak:
-      rule: "Host(`auth.your-domain.example.com`)"
+      rule: "Host(`auth.${DOMAIN}`)"
       priority: 10
       entryPoints:
         - web
       service: keycloak
 
     registry:
-      rule: "Host(`apps.your-domain.example.com`)"
+      rule: "Host(`apps.${DOMAIN}`)"
       priority: 10
       entryPoints:
         - web
@@ -46,7 +46,7 @@ http:
       service: registry
 
     ttyd:
-      rule: "Host(`t.your-domain.example.com`)"
+      rule: "Host(`t.${DOMAIN}`)"
       priority: 10
       entryPoints:
         - web
@@ -55,7 +55,7 @@ http:
       service: ttyd
 
     catchall:
-      rule: "HostRegexp(`{subdomain:[a-z0-9-]+}.your-domain.example.com`) && !Host(`auth.your-domain.example.com`)"
+      rule: "HostRegexp(`{subdomain:[a-z0-9-]+}.${DOMAIN}`) && !Host(`auth.${DOMAIN}`)"
       priority: 0
       entryPoints:
         - web

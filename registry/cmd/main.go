@@ -535,6 +535,7 @@ func (s *Server) deleteApp(w http.ResponseWriter, r *http.Request) {
 }
 
 type BackupTarget struct {
+	ID               string `json:"id"`
 	Name             string `json:"name"`
 	ConnectionString string `json:"connection_string"`
 }
@@ -546,7 +547,7 @@ func (s *Server) backupTargets(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rows, err := s.db.Query(`SELECT name, connection_string FROM apps WHERE app_type = 'db' AND enabled = true AND connection_string != ''`)
+	rows, err := s.db.Query(`SELECT id, name, connection_string FROM apps WHERE app_type = 'db' AND enabled = true AND connection_string != ''`)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -556,7 +557,7 @@ func (s *Server) backupTargets(w http.ResponseWriter, r *http.Request) {
 	targets := []BackupTarget{}
 	for rows.Next() {
 		var t BackupTarget
-		if err := rows.Scan(&t.Name, &t.ConnectionString); err != nil {
+		if err := rows.Scan(&t.ID, &t.Name, &t.ConnectionString); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}

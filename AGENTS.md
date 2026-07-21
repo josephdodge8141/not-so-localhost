@@ -4,13 +4,13 @@
 
 - `ttyd` runs natively on macOS (LaunchAgent) — tmux-based terminal access via browser.
 - Docker Compose stack: postgres, keycloak, oauth2-proxy (×3), caddy, terminal (for SSH), todo, homarr, cloudflared, backup, registry, pgweb.
-- Caddy routes by hostname, Cloudflare tunnel is a single wildcard `*.joedodge.dev` → `caddy:80`.
-- Keycloak + oauth2-proxy provide OIDC auth for `t.joedodge.dev`, `home.joedodge.dev`, and `apps.joedodge.dev`.
+- Caddy routes by hostname, Cloudflare tunnel is a single wildcard `*.your-domain.example.com` → `caddy:80`.
+- Keycloak + oauth2-proxy provide OIDC auth for `t.your-domain.example.com`, `home.your-domain.example.com`, and `apps.your-domain.example.com`.
 
 ## Key Constraints
 
 - No sudo, SSH Remote Login disabled, Tailscale blocked by MDM.
-- Corporate DNS/FortiGuard sinkhole `joedodge.dev` on corp network — the stack is designed for personal WiFi/cellular access via Cloudflare Tunnel.
+- Corporate DNS/FortiGuard sinkhole `your-domain.example.com` on corp network — the stack is designed for personal WiFi/cellular access via Cloudflare Tunnel.
 - Postgres:16-alpine has no bash — init scripts must use `#!/bin/sh`.
 
 ## Network Layout
@@ -22,16 +22,16 @@
 
 | Hostname | Target |
 |---|---|
-| `joedodge.dev` | hello world (no auth) |
-| `auth.joedodge.dev` | Keycloak (OIDC issuer) |
-| `t.joedodge.dev` | oauth2-proxy-ttyd → host.docker.internal:7681 |
-| `home.joedodge.dev` | oauth2-proxy-homarr → homarr:3000 |
-| `apps.joedodge.dev` | oauth2-proxy-registry → registry:7272 |
-| `/todo/*` | todo app (behind t.joedodge.dev auth) |
+| `your-domain.example.com` | hello world (no auth) |
+| `auth.your-domain.example.com` | Keycloak (OIDC issuer) |
+| `t.your-domain.example.com` | oauth2-proxy-ttyd → host.docker.internal:7681 |
+| `home.your-domain.example.com` | oauth2-proxy-homarr → homarr:3000 |
+| `apps.your-domain.example.com` | oauth2-proxy-registry → registry:7272 |
+| `/todo/*` | todo app (behind t.your-domain.example.com auth) |
 
 ## OIDC Flow
 
-oauth2-proxy uses `--oidc-issuer-url=http://keycloak:8080/realms/local` for server-side calls and `--login-url=https://auth.joedodge.dev/realms/local/protocol/openid-connect/auth` for browser redirects. Keycloak runs with `KC_HOSTNAME=http://keycloak:8080` (internal) and `KC_HOSTNAME_STRICT=false` + `KC_PROXY_HEADERS=xforwarded` to accept proxied requests from Caddy.
+oauth2-proxy uses `--oidc-issuer-url=http://keycloak:8080/realms/local` for server-side calls and `--login-url=https://auth.your-domain.example.com/realms/local/protocol/openid-connect/auth` for browser redirects. Keycloak runs with `KC_HOSTNAME=http://keycloak:8080` (internal) and `KC_HOSTNAME_STRICT=false` + `KC_PROXY_HEADERS=xforwarded` to accept proxied requests from Caddy.
 
 ## Keycloak Config
 
@@ -41,7 +41,7 @@ oauth2-proxy uses `--oidc-issuer-url=http://keycloak:8080/realms/local` for serv
   - Client ID: `registry`
   - Client protocol: openid-connect
   - Standard flow enabled
-  - Valid redirect URIs: `https://apps.joedodge.dev/oauth2/callback`, `http://localhost:4182/oauth2/callback`
+  - Valid redirect URIs: `https://apps.your-domain.example.com/oauth2/callback`, `http://localhost:4182/oauth2/callback`
   - Client authentication ON
   - Client secret matches `OAUTH2_CLIENT_SECRET_REGISTRY`
 - Users: `joe` (password: `password`)
@@ -54,11 +54,11 @@ All in `.env` (gitignored). Generated via `openssl rand -base64 14` or Node.js c
 ## Testing
 
 From personal WiFi/cellular (not corp network):
-- `t.joedodge.dev` → Keycloak login → terminal
-- `home.joedodge.dev` → Keycloak login → Homarr
-- `auth.joedodge.dev` → Keycloak admin console
-- `apps.joedodge.dev` → Keycloak login → App Registry
-- `joedodge.dev` → hello world (no auth)
+- `t.your-domain.example.com` → Keycloak login → terminal
+- `home.your-domain.example.com` → Keycloak login → Homarr
+- `auth.your-domain.example.com` → Keycloak admin console
+- `apps.your-domain.example.com` → Keycloak login → App Registry
+- `your-domain.example.com` → hello world (no auth)
 
 ## Backup Service
 

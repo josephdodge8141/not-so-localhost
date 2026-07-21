@@ -6,19 +6,19 @@ http:
           - "/todo-db"
   routers:
     homarr:
-      rule: "Host(`apps.joedodge.dev`) && PathPrefix(`/home`)"
+      rule: "Host(`apps.your-domain.example.com`) && PathPrefix(`/home`)"
       entryPoints:
         - web
       middlewares:
         - auth
       service: homarr
     todo:
-      rule: "Host(`apps.joedodge.dev`) && PathPrefix(`/todo`)"
+      rule: "Host(`apps.your-domain.example.com`) && PathPrefix(`/todo`)"
       entryPoints:
         - web
       service: todo
     todo-db:
-      rule: "Host(`apps.joedodge.dev`) && PathPrefix(`/todo-db`)"
+      rule: "Host(`apps.your-domain.example.com`) && PathPrefix(`/todo-db`)"
       entryPoints:
         - web
       middlewares:

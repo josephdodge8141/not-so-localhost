@@ -73,11 +73,20 @@ func main() {
 		log.Fatalf("docker client: %v", err)
 	}
 
-	serv := &Server{db: db, docker: dockerClient}
+	domain := getEnv("DOMAIN", "your-domain.example.com")
+
+	serv := &Server{db: db, docker: dockerClient, domain: domain}
 	serv.ensureAllSidecars(context.Background())
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("/{$}", serveFrontend)
+	mux.HandleFunc("/{$}", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/" {
+			http.NotFound(w, r)
+			return
+		}
+		serveFrontend(w, r)
+	})
+	mux.HandleFunc("GET /api/config", serv.apiConfig)
 	mux.HandleFunc("GET /api/apps", serv.listApps)
 	mux.HandleFunc("POST /api/apps", serv.createApp)
 	mux.HandleFunc("GET /api/apps/{id}", serv.getApp)
@@ -94,6 +103,7 @@ func main() {
 type Server struct {
 	db     *sql.DB
 	docker *client.Client
+	domain string
 }
 
 var (
@@ -131,9 +141,9 @@ func (s *Server) writeRouteFile(apps []App) {
 		rule := a.RouteRule
 		if rule == "" {
 			if a.AppType == "fe" {
-				rule = fmt.Sprintf("Host(`apps.joedodge.dev`) && PathPrefix(`/%s`)", sn)
+				rule = fmt.Sprintf("Host(`apps.%s`) && PathPrefix(`/%s`)", s.domain, sn)
 			} else {
-				rule = fmt.Sprintf("Host(`%s.joedodge.dev`)", sn)
+				rule = fmt.Sprintf("Host(`%s.%s`)", sn, s.domain)
 			}
 		}
 		mws := ""
@@ -307,6 +317,20 @@ func (s *Server) ensureAllSidecars(ctx context.Context) {
 	s.writeAllRoutes()
 }
 
+func getEnv(key, fallback string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return fallback
+}
+
+func (s *Server) apiConfig(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{
+		"domain": s.domain,
+	})
+}
+
 func serveFrontend(w http.ResponseWriter, r *http.Request) {
 	data, err := frontend.ReadFile("index.html")
 	if err != nil {
@@ -396,9 +420,9 @@ func (s *Server) createApp(w http.ResponseWriter, r *http.Request) {
 	if a.RouteRule == "" {
 		sn := sanitizeName(a.Name)
 		if a.AppType == "fe" {
-			a.RouteRule = fmt.Sprintf("Host(`apps.joedodge.dev`) && PathPrefix(`/%s`)", sn)
+			a.RouteRule = fmt.Sprintf("Host(`apps.%s`) && PathPrefix(`/%s`)", s.domain, sn)
 		} else {
-			a.RouteRule = fmt.Sprintf("Host(`%s.joedodge.dev`)", sn)
+			a.RouteRule = fmt.Sprintf("Host(`%s.%s`)", sn, s.domain)
 		}
 	}
 	if a.ContainerName == "" {
@@ -471,9 +495,9 @@ func (s *Server) updateApp(w http.ResponseWriter, r *http.Request) {
 	if a.RouteRule == "" {
 		sn := sanitizeName(a.Name)
 		if a.AppType == "fe" {
-			a.RouteRule = fmt.Sprintf("Host(`apps.joedodge.dev`) && PathPrefix(`/%s`)", sn)
+			a.RouteRule = fmt.Sprintf("Host(`apps.%s`) && PathPrefix(`/%s`)", s.domain, sn)
 		} else {
-			a.RouteRule = fmt.Sprintf("Host(`%s.joedodge.dev`)", sn)
+			a.RouteRule = fmt.Sprintf("Host(`%s.%s`)", sn, s.domain)
 		}
 	}
 	if a.ContainerName == "" {

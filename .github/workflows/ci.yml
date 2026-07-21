@@ -1,0 +1,12 @@
+name: CI/CD
+on:
+  pull_request:
+    types: [opened, reopened, synchronize]
+permissions:
+  contents: write
+  pull-requests: write
+  statuses: write
+jobs:
+  ci-cd:
+    uses: josephdodge8141/auto-pr/.github/workflows/ci-cd-pipeline.yml@main
+    secrets: inherit

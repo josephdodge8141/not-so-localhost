@@ -16,22 +16,22 @@ Local services accessible anywhere via Cloudflare Tunnel, with Keycloak authenti
 docker compose up -d
 ```
 
-ttyd must be running separately on the macOS host (`brew services start ttyd`) for web terminal access at `t.joedodge.dev`.
+ttyd must be running separately on the macOS host (`brew services start ttyd`) for web terminal access at `t.your-domain.example.com`.
 
 ## Architecture
 
 ```
 Cloudflare Tunnel → Traefik:80
-  ├── auth.joedodge.dev  → keycloak:8080
-  ├── t.joedodge.dev     → oauth2-proxy → host.docker.internal:7681 (ttyd)
-  ├── apps.joedodge.dev  → oauth2-proxy → registry:7272
-  └── *.joedodge.dev     → oauth2-proxy → registry:7272 (catchall)
+  ├── auth.your-domain.example.com  → keycloak:8080
+  ├── t.your-domain.example.com     → oauth2-proxy → host.docker.internal:7681 (ttyd)
+  ├── apps.your-domain.example.com  → oauth2-proxy → registry:7272
+  └── *.your-domain.example.com     → oauth2-proxy → registry:7272 (catchall)
 ```
 
 - Cloudflare Tunnel terminates TLS and forwards to Traefik on port 80.
 - Traefik uses the file provider with dynamic config in `traefik/dynamic/`.
 - oauth2-proxy provides forward-auth middleware; protected routes authenticate via Keycloak.
-- Wildcard DNS `*.joedodge.dev` is routed through Cloudflare Tunnel (`cloudflared tunnel route dns`).
+- Wildcard DNS `*.your-domain.example.com` is routed through Cloudflare Tunnel (`cloudflared tunnel route dns`).
 - ttyd runs natively on macOS (not in Docker) because macOS disables SSH Remote Login; Traefik proxies to `host.docker.internal:7681`.
 - A Dropbear SSH server (`terminal` service) runs in Docker on port 2222 for SSH-based terminal access.
 
@@ -39,14 +39,14 @@ Cloudflare Tunnel → Traefik:80
 
 | Hostname | Service | Auth |
 |----------|---------|------|
-| `auth.joedodge.dev` | Keycloak admin console | N/A |
-| `t.joedodge.dev` | ttyd (Mac shell via oauth2-proxy) | Required |
-| `apps.joedodge.dev` | App Registry (via oauth2-proxy) | Required |
-| `*.joedodge.dev` | Catchall — App Registry (via oauth2-proxy) | Required |
+| `auth.your-domain.example.com` | Keycloak admin console | N/A |
+| `t.your-domain.example.com` | ttyd (Mac shell via oauth2-proxy) | Required |
+| `apps.your-domain.example.com` | App Registry (via oauth2-proxy) | Required |
+| `*.your-domain.example.com` | Catchall — App Registry (via oauth2-proxy) | Required |
 
 ## Adding a New App
 
-Register the app at the Registry dashboard (`apps.joedodge.dev`). The Registry writes the Traefik route to `traefik/dynamic/managed.yml` automatically. No code changes, tunnel edits, or Docker Compose modifications needed.
+Register the app at the Registry dashboard (`apps.your-domain.example.com`). The Registry writes the Traefik route to `traefik/dynamic/managed.yml` automatically. No code changes, tunnel edits, or Docker Compose modifications needed.
 
 ## Backup
 

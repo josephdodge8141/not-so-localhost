@@ -57,7 +57,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 </head>
 <body>
 <div class="header">
-  <h1><span>Apps</span>.joedodge.dev</h1>
+  <h1><span>Apps</span>.your-domain.example.com</h1>
   <button class="btn btn-primary" onclick="showForm()">+ Register App</button>
 </div>
 
@@ -78,7 +78,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
       </div>
       <div class="card-body" style="margin:0"><p>tmux sessions on this Mac</p></div>
     </div>
-    <a href="https://t.joedodge.dev" target="_blank" class="btn btn-sm btn-primary">Open →</a>
+    <a href="https://t.your-domain.example.com" target="_blank" class="btn btn-sm btn-primary">Open →</a>
   </div>
   <div class="card-grid" id="appGrid"></div>
 </div>
@@ -106,7 +106,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
       </div>
       <div class="form-group" id="field-route">
         <label for="route_rule">Route Rule <span class="muted">(leave blank for default)</span></label>
-        <input type="text" id="route_rule" placeholder='e.g. Host(`apps.jd.dev`) && PathPrefix(`/myapp`)'>
+        <input type="text" id="route_rule" placeholder='e.g. Host(`apps.your-domain.example.com`) && PathPrefix(`/myapp`)'>
       </div>
       <div class="form-group" id="field-target_url">
         <label for="target_url">Target URL</label>
@@ -141,6 +141,17 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 <script>
 let apps = [];
 let currentFilter = '';
+let domainConfig = { domain: 'your-domain.example.com' };
+
+async function loadConfig() {
+  try {
+    const res = await fetch('/api/config');
+    domainConfig = await res.json();
+  } catch {}
+  document.querySelector('h1').innerHTML = `<span>Apps</span>.${domainConfig.domain}`;
+  const terminalLink = document.querySelector('.card a[href*="."]');
+  if (terminalLink) terminalLink.href = `https://t.${domainConfig.domain}`;
+}
 
 async function fetchApps() {
   const url = currentFilter ? `/api/apps?type=${currentFilter}` : '/api/apps';
@@ -296,7 +307,7 @@ function showToast(msg, type) {
   setTimeout(() => el.remove(), 3000);
 }
 
-fetchApps();
+loadConfig().then(() => fetchApps());
 </script>
 </body>
 </html>

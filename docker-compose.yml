@@ -95,14 +95,14 @@ services:
     command:
       - "--provider=keycloak-oidc"
       - "--oidc-issuer-url=http://keycloak:8080/realms/local"
-      - "--login-url=https://auth.joedodge.dev/realms/local/protocol/openid-connect/auth"
+      - "--login-url=https://auth.your-domain.example.com/realms/local/protocol/openid-connect/auth"
       - "--redeem-url=http://keycloak:8080/realms/local/protocol/openid-connect/token"
       - "--oidc-jwks-url=http://keycloak:8080/realms/local/protocol/openid-connect/certs"
       - "--insecure-oidc-skip-issuer-verification"
       - "--skip-oidc-discovery"
       - "--email-domain=*"
       - "--http-address=0.0.0.0:4180"
-      - "--cookie-domain=.joedodge.dev"
+      - "--cookie-domain=.your-domain.example.com"
     depends_on:
       - keycloak
     networks:

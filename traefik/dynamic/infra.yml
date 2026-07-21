@@ -30,14 +30,14 @@ http:
       service: oauth2-proxy
 
     keycloak:
-      rule: "Host(`auth.joedodge.dev`)"
+      rule: "Host(`auth.your-domain.example.com`)"
       priority: 10
       entryPoints:
         - web
       service: keycloak
 
     registry:
-      rule: "Host(`apps.joedodge.dev`)"
+      rule: "Host(`apps.your-domain.example.com`)"
       priority: 10
       entryPoints:
         - web
@@ -46,7 +46,7 @@ http:
       service: registry
 
     ttyd:
-      rule: "Host(`t.joedodge.dev`)"
+      rule: "Host(`t.your-domain.example.com`)"
       priority: 10
       entryPoints:
         - web
@@ -55,7 +55,7 @@ http:
       service: ttyd
 
     catchall:
-      rule: "HostRegexp(`{subdomain:[a-z0-9-]+}.joedodge.dev`) && !Host(`auth.joedodge.dev`)"
+      rule: "HostRegexp(`{subdomain:[a-z0-9-]+}.your-domain.example.com`) && !Host(`auth.your-domain.example.com`)"
       priority: 0
       entryPoints:
         - web

@@ -33,7 +33,7 @@ oauth2-proxy uses `--oidc-issuer-url=http://keycloak:8080/realms/local` for serv
 ## Keycloak Config
 
 - Realm: `local`
-- Clients: `ttyd`, `homarr`, `registry` (confidential, standard flow, redirect URIs match oauth2-proxy config)
+- Clients: `ttyd`, `registry` (confidential, standard flow, redirect URIs match oauth2-proxy config)
 - `registry` client config (manual Keycloak step):
   - Client ID: `registry`
   - Client protocol: openid-connect
@@ -110,4 +110,4 @@ IAM policy (minimal) for backup service credentials:
 ## To Do
 
 - [ ] Test full auth flow from iPhone (not possible from corp network).
-- [ ] Set up Keycloak HTTPS if needed (currently HTTP behind Caddy which terminates at tunnel).
+- [ ] Set up Keycloak HTTPS if needed (currently HTTP behind Traefik which terminates at tunnel).

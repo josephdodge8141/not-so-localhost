@@ -9,3 +9,4 @@ registry/ca-bundle.pem
 cloudflared/cert.pem
 traefik/dynamic/infra.yml
 traefik/dynamic/managed.yml
+.serena/

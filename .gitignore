@@ -5,6 +5,7 @@ cloudflared/config.yml
 */node_modules/
 registry/registry
 cloudflared/cert.pem
+cloudflared/ca-bundle.pem
 traefik/dynamic/infra.yml
 traefik/dynamic/managed.yml
 .serena/

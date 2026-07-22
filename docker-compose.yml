@@ -80,7 +80,7 @@ services:
     restart: unless-stopped
 
   cloudflared:
-    image: cloudflare/cloudflared:latest
+    build: ./cloudflared
     env_file: ./cloudflared/.env
     command: tunnel --protocol http2 --config /etc/cloudflared/config.yml run
     volumes:

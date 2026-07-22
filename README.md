@@ -20,12 +20,25 @@ Before starting the stack, set up Cloudflare Tunnel and DNS:
 
 The stack uses these subdomains — all covered by the wildcard DNS route:
 
-| Subdomain | Service |
-|-----------|---------|
-| `auth.YOUR_DOMAIN` | Keycloak admin console (no auth) |
-| `t.YOUR_DOMAIN` | Web terminal (via oauth2-proxy) |
-| `apps.YOUR_DOMAIN` | App Registry dashboard (via oauth2-proxy) |
-| `*.YOUR_DOMAIN` | Catchall — deployed apps (via oauth2-proxy) |
+| Subdomain          | Service                                     |
+|--------------------|---------------------------------------------|
+| `auth.YOUR_DOMAIN` | Keycloak admin console (no auth)            |
+| `t.YOUR_DOMAIN`    | Web terminal (via oauth2-proxy)             |
+| `apps.YOUR_DOMAIN` | App Registry dashboard (via oauth2-proxy)   |
+| `*.YOUR_DOMAIN`    | Catchall — deployed apps (via oauth2-proxy) |
+
+### Corporate Proxy / SSL Inspection
+
+If you're behind a corporate firewall that does SSL inspection, the cloudflared container needs your corporate CA certificate to verify Cloudflare's edge TLS connections:
+
+```bash
+# macOS
+security find-certificate -a -p -c "NICE" > cloudflared/ca-bundle.pem
+
+# Windows (PowerShell) — export your corporate CA from Cert Manager to PEM
+```
+
+The file is gitignored and injected at runtime by the cloudflared container's entrypoint. Without it, the tunnel will fail with `x509: certificate signed by unknown authority`.
 
 ## Quick Start
 
@@ -41,7 +54,7 @@ On macOS, ttyd must be running separately (`brew services start ttyd`) for web t
 
 ## Architecture
 
-```
+```text
 Cloudflare Tunnel → Traefik:80
   ├── auth.YOUR_DOMAIN  → keycloak:8080
   ├── t.YOUR_DOMAIN     → oauth2-proxy → host.docker.internal:7681 (ttyd)
@@ -59,12 +72,12 @@ Cloudflare Tunnel → Traefik:80
 
 ## Hostnames
 
-| Hostname | Service | Auth |
-|----------|---------|------|
-| `auth.YOUR_DOMAIN` | Keycloak admin console | N/A |
-| `t.YOUR_DOMAIN` | ttyd (Mac shell via oauth2-proxy) | Required |
-| `apps.YOUR_DOMAIN` | App Registry (via oauth2-proxy) | Required |
-| `*.YOUR_DOMAIN` | Catchall — App Registry (via oauth2-proxy) | Required |
+| Hostname           | Service                                    | Auth     |
+|--------------------|--------------------------------------------|----------|
+| `auth.YOUR_DOMAIN` | Keycloak admin console                     | N/A      |
+| `t.YOUR_DOMAIN`    | ttyd (Mac shell via oauth2-proxy)          | Required |
+| `apps.YOUR_DOMAIN` | App Registry (via oauth2-proxy)            | Required |
+| `*.YOUR_DOMAIN`    | Catchall — App Registry (via oauth2-proxy) | Required |
 
 ## Adding a New App
 

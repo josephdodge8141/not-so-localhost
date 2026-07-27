@@ -95,6 +95,10 @@ IAM policy (minimal) for backup service credentials:
 }
 ```
 
+## Skills
+
+- `.agents/skills/registry-api/SKILL.md` — API versioning conventions, when to bump, how to add a new version, Git tagging workflow
+
 ## To Do
 
 - [ ] Test full auth flow from iPhone (not possible from corp network).

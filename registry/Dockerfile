@@ -1,5 +1,6 @@
 ARG VERSION=dev
 FROM golang:alpine AS builder
+ARG VERSION
 RUN apk add --no-cache ca-certificates
 WORKDIR /build
 COPY go.mod go.sum ./

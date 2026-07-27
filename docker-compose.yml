@@ -52,6 +52,8 @@ services:
 
   registry:
     build: ./registry
+    ports:
+      - "7272:7272"
     env_file: ./registry/.env
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:rw

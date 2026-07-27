@@ -51,7 +51,10 @@ services:
     restart: unless-stopped
 
   registry:
-    build: ./registry
+    build:
+      context: ./registry
+      args:
+        VERSION: ${REGISTRY_VERSION:-dev}
     ports:
       - "7272:7272"
     env_file: ./registry/.env

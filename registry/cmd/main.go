@@ -87,6 +87,15 @@ func main() {
 		serveFrontend(w, r)
 	})
 	mux.HandleFunc("GET /api/config", serv.apiConfig)
+	// v1 API — stable contract for nsl CLI and external consumers
+	mux.HandleFunc("GET /api/v1/version", apiVersion)
+	mux.HandleFunc("GET /api/v1/apps", serv.listApps)
+	mux.HandleFunc("POST /api/v1/apps", serv.createApp)
+	mux.HandleFunc("GET /api/v1/apps/{id}", serv.getApp)
+	mux.HandleFunc("PUT /api/v1/apps/{id}", serv.updateApp)
+	mux.HandleFunc("DELETE /api/v1/apps/{id}", serv.deleteApp)
+	mux.HandleFunc("GET /api/v1/apps/{id}/logs", serv.getAppLogs)
+	// legacy routes (no prefix) — kept for backward compat
 	mux.HandleFunc("GET /api/apps", serv.listApps)
 	mux.HandleFunc("POST /api/apps", serv.createApp)
 	mux.HandleFunc("GET /api/apps/{id}", serv.getApp)
@@ -315,6 +324,13 @@ func (s *Server) ensureAllSidecars(ctx context.Context) {
 		}
 	}
 	s.writeAllRoutes()
+}
+
+var version = "dev"
+
+func apiVersion(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"version": version})
 }
 
 func getEnv(key, fallback string) string {

@@ -1,3 +1,6 @@
+// Package main implements the backup service: periodic pg dumps pushed to S3
+// (the store of record), local emergency copies while S3 is unreachable, and
+// unconditional 30-day pruning of stale and orphaned backups.
 package main
 
 import (
@@ -633,7 +636,7 @@ func (s *Server) backupTarget(ctx context.Context, t backupTarget) error {
 	return nil
 }
 
-func (s *Server) handleListBackups(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleListBackups(w http.ResponseWriter, _ *http.Request) {
 	s.mu.RLock()
 	records := make([]*BackupRecord, 0, len(s.records))
 	for _, rec := range s.records {

@@ -1,3 +1,6 @@
+// Package main implements the backup service: periodic pg dumps pushed to S3
+// (the store of record), local emergency copies while S3 is unreachable, and
+// unconditional 30-day pruning of stale and orphaned backups.
 package main
 
 import (
@@ -47,7 +50,7 @@ func (s *FileStore) Load(_ context.Context, key string) (io.ReadCloser, error) {
 }
 
 // Delete removes the single file stored under key.
-func (s *FileStore) Delete(ctx context.Context, key string) error {
+func (s *FileStore) Delete(_ context.Context, key string) error {
 	path := filepath.Join(s.baseDir, key)
 	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
 		return err
@@ -56,7 +59,7 @@ func (s *FileStore) Delete(ctx context.Context, key string) error {
 }
 
 // DeletePrefix removes every file below prefix; an empty prefix is refused.
-func (s *FileStore) DeletePrefix(ctx context.Context, prefix string) error {
+func (s *FileStore) DeletePrefix(_ context.Context, prefix string) error {
 	if prefix == "" {
 		return fmt.Errorf("refusing to delete empty prefix")
 	}
@@ -69,7 +72,7 @@ func (s *FileStore) DeletePrefix(ctx context.Context, prefix string) error {
 }
 
 // List returns the file keys below prefix.
-func (s *FileStore) List(ctx context.Context, prefix string) ([]string, error) {
+func (s *FileStore) List(_ context.Context, prefix string) ([]string, error) {
 	root := filepath.Join(s.baseDir, prefix)
 	var keys []string
 	err := filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {

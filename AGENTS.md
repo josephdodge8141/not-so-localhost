@@ -65,7 +65,8 @@ The `backup/` service periodically pg_dumps registered databases to S3.
 - Discovered DBs: fetched from registry API (`GET /internal/backup-targets`), keyed by app UUID
 - S3 path: `s3://<bucket>/backups/<uuid-or-name>/<timestamp>.sql.gz`
 - Interval: configurable via `BACKUP_INTERVAL` (default `1h`)
-- Stale backups: apps deleted from registry have their backups pruned after `STALE_BACKUP_DAYS` (default 30). The `POST /api/backups/{db}/restore` endpoint refuses restore for stale orphaned backups and deletes them instead.
+- S3 is the store of record: backups are written to S3 first; local (`BACKUP_DIR`) files are deleted once the S3 upload succeeds. If S3 is down, an emergency local copy is kept and the tracker's `last_backup_at` only advances on S3 success; the next successful upload wipes all local copies.
+- Stale backups: apps deleted from registry have their backups pruned after `STALE_BACKUP_DAYS` (default 30). Pruning runs at startup and every sweep, plus a reconcile pass that also deletes (a) local files that already exist in S3 and (b) untracked orphan prefixes older than 30 days. `DeletePrefix` refuses empty prefixes. The `POST /api/backups/{db}/restore` endpoint refuses restore for stale orphaned backups and deletes them instead.
 - `POSTGRES_ADMIN_PASSWORD` must be set for the restore endpoint — it drops and recreates the target DB as the `postgres` superuser. Restore returns 500 without it.
 
 ### S3 Bucket Setup

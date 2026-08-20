@@ -10,3 +10,8 @@ jobs:
   ci-cd:
     uses: josephdodge8141/auto-pr/.github/workflows/ci-cd-pipeline.yml@main
     secrets: inherit
+    with:
+      # golangci-lint runs in project mode at the repo root, which is not a Go
+      # module (the module lives in backup/), so it can never type-check here.
+      # revive + go vet still cover the Go code.
+      megalinter_disable_linters: GO_GOLANGCI_LINT

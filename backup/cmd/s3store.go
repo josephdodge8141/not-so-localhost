@@ -10,19 +10,23 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 )
 
+// S3Store stores backups as objects in an S3 bucket.
 type S3Store struct {
 	client *s3.Client
 	bucket string
 }
 
+// NewS3Store returns a Store backed by the given S3 client and bucket.
 func NewS3Store(client *s3.Client, bucket string) *S3Store {
 	return &S3Store{client: client, bucket: bucket}
 }
 
+// Name returns a human-readable identifier for the store.
 func (s *S3Store) Name() string {
 	return fmt.Sprintf("s3://%s", s.bucket)
 }
 
+// Save uploads the backup blob under key.
 func (s *S3Store) Save(ctx context.Context, key string, r io.Reader) error {
 	_, err := s.client.PutObject(ctx, &s3.PutObjectInput{
 		Bucket: aws.String(s.bucket),
@@ -32,6 +36,7 @@ func (s *S3Store) Save(ctx context.Context, key string, r io.Reader) error {
 	return err
 }
 
+// Load streams the backup blob stored under key.
 func (s *S3Store) Load(ctx context.Context, key string) (io.ReadCloser, error) {
 	result, err := s.client.GetObject(ctx, &s3.GetObjectInput{
 		Bucket: aws.String(s.bucket),
@@ -43,6 +48,7 @@ func (s *S3Store) Load(ctx context.Context, key string) (io.ReadCloser, error) {
 	return result.Body, nil
 }
 
+// Delete removes the single object stored under key.
 func (s *S3Store) Delete(ctx context.Context, key string) error {
 	_, err := s.client.DeleteObject(ctx, &s3.DeleteObjectInput{
 		Bucket: aws.String(s.bucket),
@@ -51,6 +57,7 @@ func (s *S3Store) Delete(ctx context.Context, key string) error {
 	return err
 }
 
+// DeletePrefix removes every object below prefix; an empty prefix is refused.
 func (s *S3Store) DeletePrefix(ctx context.Context, prefix string) error {
 	if prefix == "" {
 		return fmt.Errorf("refusing to delete empty prefix")
@@ -85,6 +92,7 @@ func (s *S3Store) DeletePrefix(ctx context.Context, prefix string) error {
 	return nil
 }
 
+// List returns the object keys below prefix.
 func (s *S3Store) List(ctx context.Context, prefix string) ([]string, error) {
 	var keys []string
 	paginator := s3.NewListObjectsV2Paginator(s.client, &s3.ListObjectsV2Input{

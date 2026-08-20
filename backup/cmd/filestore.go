@@ -10,18 +10,22 @@ import (
 	"strings"
 )
 
+// FileStore stores backups as files under a base directory.
 type FileStore struct {
 	baseDir string
 }
 
+// NewFileStore returns a Store backed by the local directory baseDir.
 func NewFileStore(baseDir string) *FileStore {
 	return &FileStore{baseDir: baseDir}
 }
 
+// Name returns a human-readable identifier for the store.
 func (s *FileStore) Name() string {
 	return fmt.Sprintf("file://%s", s.baseDir)
 }
 
+// Save writes the backup blob under key.
 func (s *FileStore) Save(_ context.Context, key string, r io.Reader) error {
 	path := filepath.Join(s.baseDir, key)
 	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
@@ -36,11 +40,13 @@ func (s *FileStore) Save(_ context.Context, key string, r io.Reader) error {
 	return err
 }
 
+// Load streams the backup blob stored under key.
 func (s *FileStore) Load(_ context.Context, key string) (io.ReadCloser, error) {
 	path := filepath.Join(s.baseDir, key)
 	return os.Open(path)
 }
 
+// Delete removes the single file stored under key.
 func (s *FileStore) Delete(ctx context.Context, key string) error {
 	path := filepath.Join(s.baseDir, key)
 	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
@@ -49,6 +55,7 @@ func (s *FileStore) Delete(ctx context.Context, key string) error {
 	return nil
 }
 
+// DeletePrefix removes every file below prefix; an empty prefix is refused.
 func (s *FileStore) DeletePrefix(ctx context.Context, prefix string) error {
 	if prefix == "" {
 		return fmt.Errorf("refusing to delete empty prefix")
@@ -61,6 +68,7 @@ func (s *FileStore) DeletePrefix(ctx context.Context, prefix string) error {
 	return nil
 }
 
+// List returns the file keys below prefix.
 func (s *FileStore) List(ctx context.Context, prefix string) ([]string, error) {
 	root := filepath.Join(s.baseDir, prefix)
 	var keys []string

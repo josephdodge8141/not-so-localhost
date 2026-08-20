@@ -21,6 +21,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+// Config holds all runtime configuration for the backup service.
 type Config struct {
 	DatabaseURL           string
 	RegistryURL           string
@@ -35,6 +36,8 @@ type Config struct {
 	StaleBackupDays       int
 }
 
+// Server owns the backup sweep: configured stores, the registry-backed
+// target set, and the backup_tracker records.
 type Server struct {
 	cfg          Config
 	db           *pgxpool.Pool
@@ -45,6 +48,8 @@ type Server struct {
 	hardcodedDbs []HardcodedDB
 }
 
+// HardcodedDB describes a database backed up by name rather than via the
+// registry, e.g. the stack databases themselves.
 type HardcodedDB struct {
 	Name     string
 	User     string
@@ -52,6 +57,7 @@ type HardcodedDB struct {
 	DBName   string
 }
 
+// BackupRecord tracks the latest successful S3 backup for one database.
 type BackupRecord struct {
 	DBName        string     `json:"db_name"`
 	DBUser        string     `json:"db_user"`

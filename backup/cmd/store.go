@@ -5,6 +5,7 @@ import (
 	"io"
 )
 
+// Store is a destination for backup blobs, keyed by object key.
 type Store interface {
 	Name() string
 	Save(ctx context.Context, key string, r io.Reader) error

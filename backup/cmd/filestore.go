@@ -22,7 +22,7 @@ func (s *FileStore) Name() string {
 	return fmt.Sprintf("file://%s", s.baseDir)
 }
 
-func (s *FileStore) Save(ctx context.Context, key string, r io.Reader) error {
+func (s *FileStore) Save(_ context.Context, key string, r io.Reader) error {
 	path := filepath.Join(s.baseDir, key)
 	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
 		return err
@@ -36,7 +36,7 @@ func (s *FileStore) Save(ctx context.Context, key string, r io.Reader) error {
 	return err
 }
 
-func (s *FileStore) Load(ctx context.Context, key string) (io.ReadCloser, error) {
+func (s *FileStore) Load(_ context.Context, key string) (io.ReadCloser, error) {
 	path := filepath.Join(s.baseDir, key)
 	return os.Open(path)
 }

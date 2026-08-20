@@ -43,20 +43,21 @@ func (s *S3Store) Load(ctx context.Context, key string) (io.ReadCloser, error) {
 	return result.Body, nil
 }
 
-func (s *S3Store) DeletePrefix(ctx context.Context, prefix string) error {
-	var keys []string
-	paginator := s3.NewListObjectsV2Paginator(s.client, &s3.ListObjectsV2Input{
+func (s *S3Store) Delete(ctx context.Context, key string) error {
+	_, err := s.client.DeleteObject(ctx, &s3.DeleteObjectInput{
 		Bucket: aws.String(s.bucket),
-		Prefix: aws.String(prefix),
+		Key:    aws.String(key),
 	})
-	for paginator.HasMorePages() {
-		page, err := paginator.NextPage(ctx)
-		if err != nil {
-			return err
-		}
-		for _, obj := range page.Contents {
-			keys = append(keys, *obj.Key)
-		}
+	return err
+}
+
+func (s *S3Store) DeletePrefix(ctx context.Context, prefix string) error {
+	if prefix == "" {
+		return fmt.Errorf("refusing to delete empty prefix")
+	}
+	keys, err := s.List(ctx, prefix)
+	if err != nil {
+		return err
 	}
 	if len(keys) == 0 {
 		return nil
@@ -82,4 +83,22 @@ func (s *S3Store) DeletePrefix(ctx context.Context, prefix string) error {
 		}
 	}
 	return nil
+}
+
+func (s *S3Store) List(ctx context.Context, prefix string) ([]string, error) {
+	var keys []string
+	paginator := s3.NewListObjectsV2Paginator(s.client, &s3.ListObjectsV2Input{
+		Bucket: aws.String(s.bucket),
+		Prefix: aws.String(prefix),
+	})
+	for paginator.HasMorePages() {
+		page, err := paginator.NextPage(ctx)
+		if err != nil {
+			return nil, err
+		}
+		for _, obj := range page.Contents {
+			keys = append(keys, *obj.Key)
+		}
+	}
+	return keys, nil
 }

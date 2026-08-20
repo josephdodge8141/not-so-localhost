@@ -9,6 +9,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"path"
 	"sort"
 	"strconv"
 	"strings"
@@ -121,6 +122,9 @@ func main() {
 
 	go func() {
 		time.Sleep(5 * time.Second)
+		s.reconcileBackups(ctx)
+		log.Println("startup stale cleanup")
+		s.cleanupStaleBackups(ctx)
 		log.Println("initial backup sweep")
 		s.runAllBackups(ctx)
 	}()
@@ -320,6 +324,7 @@ func (s *Server) scheduleBackups(ctx context.Context) {
 			return
 		case <-ticker.C:
 			log.Println("scheduled backup sweep")
+			s.reconcileBackups(ctx)
 			s.runAllBackups(ctx)
 			s.cleanupStaleBackups(ctx)
 		}
@@ -339,6 +344,118 @@ func (s *Server) currentTargetKeys() map[string]bool {
 	return keys
 }
 
+func parseKeyTime(key string) time.Time {
+	base := path.Base(key)
+	base = strings.TrimSuffix(base, ".sql.gz")
+	t, err := time.Parse("20060102T150405Z", base)
+	if err != nil {
+		return time.Time{}
+	}
+	return t
+}
+
+// reconcileBackups enforces S3 as the store of record regardless of history:
+//  1. Twin-clean: any local file that also exists in S3 is deleted locally.
+//  2. Orphan-clean: prefixes with no tracker record and no current target
+//     whose newest snapshot is older than StaleBackupDays are deleted from
+//     every store.
+func (s *Server) reconcileBackups(ctx context.Context) {
+	current := s.currentTargetKeys()
+	now := time.Now()
+
+	var fileStores, s3Stores []Store
+	for _, st := range s.stores {
+		if _, ok := st.(*S3Store); ok {
+			s3Stores = append(s3Stores, st)
+		} else {
+			fileStores = append(fileStores, st)
+		}
+	}
+
+	var localKeys, s3Keys []string
+	for _, st := range fileStores {
+		keys, err := st.List(ctx, "backups")
+		if err != nil {
+			log.Printf("reconcile: list %s: %v", st.Name(), err)
+		} else {
+			localKeys = append(localKeys, keys...)
+		}
+	}
+	for _, st := range s3Stores {
+		keys, err := st.List(ctx, "backups")
+		if err != nil {
+			log.Printf("reconcile: list %s: %v", st.Name(), err)
+		} else {
+			s3Keys = append(s3Keys, keys...)
+		}
+	}
+	s3Set := make(map[string]bool, len(s3Keys))
+	for _, k := range s3Keys {
+		s3Set[k] = true
+	}
+
+	removed := 0
+	for _, k := range localKeys {
+		if s3Set[k] {
+			if err := fileStores[0].Delete(ctx, k); err != nil {
+				log.Printf("reconcile: delete local twin %s: %v", k, err)
+			} else {
+				removed++
+			}
+		}
+	}
+	if removed > 0 {
+		log.Printf("reconcile: deleted %d local backups already present in S3", removed)
+	}
+	if fs, ok := fileStores[0].(*FileStore); ok && removed > 0 {
+		fs.removeEmptyDirs()
+	}
+
+	type prefixInfo struct {
+		newestKey string
+	}
+	prefixes := make(map[string]prefixInfo)
+	addPrefixes := func(keys []string) {
+		for _, k := range keys {
+			p := prefixOfKey(k)
+			if p == "" {
+				continue
+			}
+			pi, ok := prefixes[p]
+			if !ok || k > pi.newestKey {
+				prefixes[p] = prefixInfo{newestKey: k}
+			}
+		}
+	}
+	addPrefixes(localKeys)
+	addPrefixes(s3Keys)
+
+	maxAge := time.Duration(s.cfg.StaleBackupDays) * 24 * time.Hour
+	for p, pi := range prefixes {
+		if current[p] {
+			continue
+		}
+		newest := parseKeyTime(pi.newestKey)
+		if newest.IsZero() || now.Sub(newest) < maxAge {
+			continue
+		}
+		s.mu.RLock()
+		_, tracked := s.records[p]
+		s.mu.RUnlock()
+		// Tracked-but-unregistered apps are handled by cleanupStaleBackups.
+		if tracked {
+			continue
+		}
+		age := now.Sub(newest)
+		log.Printf("reconcile: pruning orphaned backups %q (newest %s, %s old)", p, path.Base(pi.newestKey), age.Round(time.Hour))
+		for _, st := range s.stores {
+			if err := st.DeletePrefix(ctx, fmt.Sprintf("backups/%s", p)); err != nil {
+				log.Printf("reconcile: delete %s prefix %s: %v", st.Name(), p, err)
+			}
+		}
+	}
+}
+
 func (s *Server) cleanupStaleBackups(ctx context.Context) {
 	current := s.currentTargetKeys()
 	maxAge := time.Duration(s.cfg.StaleBackupDays) * 24 * time.Hour
@@ -350,7 +467,7 @@ func (s *Server) cleanupStaleBackups(ctx context.Context) {
 		if current[dbKey] {
 			continue
 		}
-		if rec.LastBackupAt == nil {
+		if rec.LastBackupAt == nil || rec.S3Prefix == "" {
 			continue
 		}
 		if now.Sub(*rec.LastBackupAt) < maxAge {
@@ -418,6 +535,7 @@ func (s *Server) backupTarget(ctx context.Context, t backupTarget) error {
 
 	timestamp := time.Now().UTC().Format("20060102T150405Z")
 	key := fmt.Sprintf("backups/%s/%s.sql.gz", dbKey, timestamp)
+	prefix := fmt.Sprintf("backups/%s", dbKey)
 
 	var dumpBuf bytes.Buffer
 	if err := dumper.Dump(ctx, t.DBInfo, &dumpBuf); err != nil {
@@ -433,23 +551,14 @@ func (s *Server) backupTarget(ctx context.Context, t backupTarget) error {
 		return fmt.Errorf("gzip close: %w", err)
 	}
 
-	for _, store := range s.stores {
-		if err := store.Save(ctx, key, bytes.NewReader(compressed.Bytes())); err != nil {
-			log.Printf("save %s -> %s: %v", t.Label, store.Name(), err)
-		}
-	}
-
 	now := time.Now()
-	prefix := fmt.Sprintf("backups/%s", dbKey)
 	rec := &BackupRecord{
 		DBName:        dbKey,
 		DBUser:        t.User,
 		DisplayName:   t.Label,
-		LastBackupAt:  &now,
 		LastBackupKey: key,
 		S3Prefix:      prefix,
 	}
-
 	s.mu.RLock()
 	existing, exists := s.records[dbKey]
 	s.mu.RUnlock()
@@ -459,11 +568,62 @@ func (s *Server) backupTarget(ctx context.Context, t backupTarget) error {
 		rec.BackupCount = 1
 	}
 
+	// S3 is the store of record. Write there first; local storage is staging only.
+	var s3Stores, fileStores []Store
+	for _, st := range s.stores {
+		if _, ok := st.(*S3Store); ok {
+			s3Stores = append(s3Stores, st)
+		} else {
+			fileStores = append(fileStores, st)
+		}
+	}
+
+	if len(s3Stores) > 0 {
+		uploaded := false
+		for _, st := range s3Stores {
+			if err := st.Save(ctx, key, bytes.NewReader(compressed.Bytes())); err != nil {
+				log.Printf("save %s -> %s: %v", t.Label, st.Name(), err)
+				continue
+			}
+			uploaded = true
+		}
+		if !uploaded {
+			// Nothing reached S3: hold an emergency local copy and do not
+			// advance the record (LastBackupAt only tracks S3 success).
+			for _, st := range fileStores {
+				if err := st.Save(ctx, key, bytes.NewReader(compressed.Bytes())); err != nil {
+					log.Printf("save %s -> %s (emergency): %v", t.Label, st.Name(), err)
+				} else {
+					log.Printf("S3 unavailable for %s; kept local emergency copy %s", t.Label, key)
+				}
+			}
+			return fmt.Errorf("s3 save %s: no surviving S3 upload (local copy kept)", key)
+		}
+		// S3 upload succeeded: local is no longer needed, clear this prefix's
+		// entire local history (any older local-only copies are superseded).
+		for _, st := range fileStores {
+			if err := st.DeletePrefix(ctx, prefix); err != nil {
+				log.Printf("clear local %s after S3 upload: %v", dbKey, err)
+			} else {
+				log.Printf("s3 upload ok; cleared local backups for %s", dbKey)
+			}
+		}
+		rec.LastBackupAt = &now
+	} else {
+		// Legacy config without S3: plain store loop, unchanged semantics.
+		for _, st := range s.stores {
+			if err := st.Save(ctx, key, bytes.NewReader(compressed.Bytes())); err != nil {
+				log.Printf("save %s -> %s: %v", t.Label, st.Name(), err)
+			}
+		}
+		rec.LastBackupAt = &now
+	}
+
 	if err := s.upsertRecord(ctx, rec); err != nil {
 		log.Printf("track %s: %v", t.Label, err)
 	}
 
-	log.Printf("backup: %s -> %s/%s", t.Label, s.stores[0].Name(), key)
+	log.Printf("backup: %s -> %s/%s", t.Label, rec.S3Prefix, timestamp)
 	return nil
 }
 

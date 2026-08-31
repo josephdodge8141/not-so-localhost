@@ -3,311 +3,188 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>App Registry</title>
+<meta name="description" content="Shared Not-So-Localhost application inventory">
+<meta name="keywords" content="NSL, applications, nodes, routing">
+<title>NSL Apps</title>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-:root{--bg:#0f172a;--surface:#1e293b;--surface2:#334155;--border:#475569;--text:#f1f5f9;--muted:#94a3b8;--primary:#3b82f6;--primary-hover:#2563eb;--green:#22c55e;--amber:#f59e0b;--red:#ef4444;--radius:8px;--shadow:0 1px 3px rgba(0,0,0,.3)}
-body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
-.header{background:var(--surface);border-bottom:1px solid var(--border);padding:16px 24px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px}
-.header h1{font-size:1.25rem;font-weight:600}
-.header h1 span{color:var(--primary)}
-.btn{padding:8px 16px;border-radius:var(--radius);border:none;cursor:pointer;font-size:.875rem;font-weight:500;transition:background .15s}
-.btn-primary{background:var(--primary);color:#fff}
-.btn-primary:hover{background:var(--primary-hover)}
-.btn-sm{padding:4px 10px;font-size:.75rem}
-.btn-danger{background:var(--red);color:#fff}
-.btn-danger:hover{background:#dc2626}
-.btn-outline{background:transparent;border:1px solid var(--border);color:var(--text)}
-.btn-outline:hover{background:var(--surface2)}
-.tabs{display:flex;gap:4px;padding:16px 24px 0;flex-wrap:wrap}
-.tab{padding:8px 16px;border-radius:var(--radius) var(--radius) 0 0;border:none;cursor:pointer;font-size:.875rem;background:transparent;color:var(--muted);transition:all .15s}
-.tab:hover{color:var(--text);background:var(--surface)}
-.tab.active{background:var(--surface);color:var(--text);font-weight:600}
-.content{padding:16px 24px 24px}
-.card-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px}
-.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px;transition:border-color .15s}
-.card:hover{border-color:var(--primary)}
-.card-header{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:12px}
-.card-name{font-weight:600;font-size:1rem}
-.badge{display:inline-block;padding:2px 8px;border-radius:12px;font-size:.6875rem;font-weight:600;text-transform:uppercase;white-space:nowrap}
-.badge-fe{background:#1e3a5f;color:#60a5fa}
-.badge-be{background:#1e3a3f;color:#34d399}
-.badge-db{background:#3b1f3b;color:#c084fc}
-.card-body{font-size:.8125rem;color:var(--muted)}
-.card-body p{margin-bottom:6px}
-.card-body .label{color:var(--text);font-weight:500}
-.card-actions{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
-.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;z-index:100;padding:16px}
-.modal{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:24px;width:100%;max-width:480px}
-.modal h2{margin-bottom:16px;font-size:1.125rem}
-.form-group{margin-bottom:12px}
-.form-group label{display:block;font-size:.8125rem;color:var(--muted);margin-bottom:4px}
-.form-group input,.form-group select{width:100%;padding:8px 12px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg);color:var(--text);font-size:.875rem}
-.form-group input:focus,.form-group select:focus{outline:none;border-color:var(--primary)}
-.form-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:16px}
-.form-group.hidden{display:none}
-.empty{text-align:center;padding:48px;color:var(--muted)}
-.toast{position:fixed;bottom:24px;right:24px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:12px 16px;font-size:.875rem;z-index:200;box-shadow:var(--shadow);animation:fadeIn .2s}
-.toast.error{border-color:var(--red)}
-.toast.success{border-color:var(--green)}
-@keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
-.hidden{display:none!important}
-@media(max-width:640px){.card-grid{grid-template-columns:1fr}.header{flex-direction:column;align-items:stretch}.header .btn{align-self:flex-end}}
+:root{--ink:#e7edf6;--muted:#92a0b5;--night:#09111f;--panel:#111c2e;--raised:#18263b;--line:#2a3b54;--blue:#60a5fa;--blue2:#2563eb;--green:#3ddc97;--red:#fb7185;--amber:#fbbf24;--radius:10px}
+body{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;background:radial-gradient(circle at 15% 0,#14243c 0,var(--night) 38%);color:var(--ink);min-height:100vh}
+header{border-bottom:1px solid var(--line);padding:22px clamp(18px,4vw,48px);display:flex;justify-content:space-between;align-items:center;gap:20px;background:rgba(9,17,31,.84);backdrop-filter:blur(12px);position:sticky;top:0;z-index:10}
+h1{font-size:1.25rem;letter-spacing:.02em}h1 span{color:var(--blue)}
+.subtitle{color:var(--muted);font-size:.75rem;margin-top:5px}
+main{padding:28px clamp(18px,4vw,48px) 60px;max-width:1440px;margin:auto}
+.node{margin-bottom:34px}.node-head{display:flex;align-items:center;gap:12px;margin-bottom:13px;border-bottom:1px solid var(--line);padding-bottom:10px}.node-head h2{font-size:1rem}.node-id{font-size:.7rem;color:var(--muted)}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:14px}
+.card{background:linear-gradient(145deg,var(--panel),#0d1727);border:1px solid var(--line);border-radius:var(--radius);padding:17px;min-height:165px;display:flex;flex-direction:column;justify-content:space-between;transition:transform .15s,border-color .15s}.card:hover{transform:translateY(-2px);border-color:#49698f}
+.card-top{display:flex;justify-content:space-between;gap:10px}.card h3{font-size:.98rem}.description{font-family:system-ui,sans-serif;color:var(--muted);font-size:.82rem;line-height:1.45;margin:10px 0}.target{font-size:.7rem;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pill{font-size:.64rem;text-transform:uppercase;letter-spacing:.06em;border-radius:999px;padding:4px 8px;height:max-content;background:#173152;color:#93c5fd}.pill.api{background:#183c32;color:#6ee7b7}.pill.off{background:#442531;color:#fda4af}
+.actions{display:flex;gap:7px;margin-top:14px;flex-wrap:wrap}.button{border:1px solid var(--line);background:var(--raised);color:var(--ink);border-radius:7px;padding:7px 11px;font:inherit;font-size:.72rem;cursor:pointer;text-decoration:none}.button:hover{border-color:var(--blue)}.button.primary{background:var(--blue2);border-color:var(--blue2)}.button.danger{color:#fecdd3}.button:disabled{opacity:.5;cursor:not-allowed}
+.empty{color:var(--muted);padding:20px 0;font-size:.82rem}.terminal{min-height:auto;border-style:dashed}
+.modal-bg{position:fixed;inset:0;background:rgba(2,6,15,.76);display:grid;place-items:center;padding:18px;z-index:20}.modal{width:min(560px,100%);background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:22px;box-shadow:0 30px 90px rgba(0,0,0,.45)}.hidden{display:none!important}
+.modal h2{font-size:1.05rem;margin-bottom:18px}.field{margin-bottom:13px}.field label{display:block;color:var(--muted);font-size:.72rem;margin-bottom:5px}.field input,.field select{width:100%;border:1px solid var(--line);background:var(--night);color:var(--ink);border-radius:7px;padding:9px 11px;font:inherit;font-size:.8rem}.field input:focus,.field select:focus{outline:2px solid #1d4ed8;border-color:var(--blue)}.form-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:20px}
+.toast{position:fixed;right:22px;bottom:22px;background:var(--raised);border:1px solid var(--green);padding:11px 14px;border-radius:8px;font-size:.75rem;z-index:30}.toast.error{border-color:var(--red)}
+@media(max-width:620px){header{align-items:flex-start;flex-direction:column}.grid{grid-template-columns:1fr}.node-id{display:none}}
 </style>
 </head>
 <body>
-<div class="header">
-  <h1><span>Apps</span>.your-domain.example.com</h1>
-  <button class="btn btn-primary" onclick="showForm()">+ Register App</button>
-</div>
-
-<div class="tabs" id="tabs">
-  <button class="tab active" data-type="" onclick="filterApps('')">All</button>
-  <button class="tab" data-type="fe" onclick="filterApps('fe')">Frontend</button>
-  <button class="tab" data-type="be" onclick="filterApps('be')">Backend</button>
-  <button class="tab" data-type="db" onclick="filterApps('db')">Database</button>
-</div>
-
-<div class="content">
-  <div class="card" style="margin-bottom:16px;border-color:var(--primary);display:flex;align-items:center;justify-content:space-between;">
-    <div>
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
-        <span style="font-size:1.1rem;">⌨️</span>
-        <span class="card-name">Terminal</span>
-        <span class="badge badge-be" style="background:#1e3a3f;color:#34d399">TTY</span>
-      </div>
-      <div class="card-body" style="margin:0"><p>tmux sessions on this Mac</p></div>
-    </div>
-    <a href="https://t.your-domain.example.com" target="_blank" class="btn btn-sm btn-primary">Open →</a>
+<header>
+  <div>
+    <h1><span>apps</span>.<span id="domain">joedodge.dev</span></h1>
+    <div class="subtitle" id="revision">shared registry</div>
   </div>
-  <div class="card-grid" id="appGrid"></div>
-</div>
+  <button class="button primary" onclick="openForm()">Register service</button>
+</header>
+<main id="content"><div class="empty">Loading registry state...</div></main>
 
-<div class="modal-overlay hidden" id="formModal">
+<div class="modal-bg hidden" id="modal">
   <div class="modal">
-    <h2 id="formTitle">Register App</h2>
-    <form id="appForm" onsubmit="submitForm(event)">
-      <input type="hidden" id="editId">
-      <div class="form-group">
-        <label for="name">Name</label>
-        <input type="text" id="name" required>
-      </div>
-      <div class="form-group">
-        <label for="description">Description</label>
-        <input type="text" id="description" placeholder="Optional">
-      </div>
-      <div class="form-group">
-        <label for="app_type">Type</label>
-        <select id="app_type" required onchange="onTypeChange()">
-          <option value="fe">Frontend</option>
-          <option value="be">Backend (OpenAPI)</option>
-          <option value="db">Database (Postgres)</option>
+    <h2 id="form-title">Register service</h2>
+    <form id="form" onsubmit="saveApp(event)">
+      <input type="hidden" id="app-id">
+      <div class="field"><label for="name">Name</label><input id="name" required pattern=".*[A-Za-z0-9].*"></div>
+      <div class="field"><label for="description">Description</label><input id="description"></div>
+      <div class="field"><label for="node">Owning machine</label><select id="node" required></select></div>
+      <div class="field"><label for="target">HTTP target reachable from Traefik</label><input id="target" required placeholder="http://host.docker.internal:4000"></div>
+      <div class="field">
+        <label for="policy">Exposure policy</label>
+        <select id="policy">
+          <option value="browser">Browser login for all routes</option>
+          <option value="upstream">Upstream authentication for all routes</option>
+          <option value="litellm">LiteLLM: browser login except /v1</option>
         </select>
       </div>
-      <div class="form-group" id="field-route">
-        <label for="route_rule">Route Rule <span class="muted">(leave blank for default)</span></label>
-        <input type="text" id="route_rule" placeholder='e.g. Host(`apps.YOUR_DOMAIN`) && PathPrefix(`/myapp`)'>
-      </div>
-      <div class="form-group" id="field-target_url">
-        <label for="target_url">Target URL</label>
-        <input type="text" id="target_url" placeholder="http://myapp:3000">
-      </div>
-      <div class="form-group hidden" id="field-docs_url">
-        <label for="docs_url">OpenAPI Spec URL</label>
-        <input type="text" id="docs_url" placeholder="http://myapp:3000/swagger">
-      </div>
-      <div class="form-group hidden" id="field-connection_string">
-        <label for="connection_string">Connection String</label>
-        <input type="text" id="connection_string" placeholder="postgres://user:pass@host:5432/db">
-      </div>
-      <div class="form-group">
-        <label for="container_name">Container Name <span class="muted">(leave blank to infer from URL)</span></label>
-        <input type="text" id="container_name" placeholder="Auto-inferred from target URL">
-      </div>
-      <div class="form-group">
-        <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
-          <input type="checkbox" id="no_auth" style="width:auto">
-          Bypass authentication
-        </label>
-      </div>
-      <div class="form-actions">
-        <button type="button" class="btn btn-outline" onclick="hideForm()">Cancel</button>
-        <button type="submit" class="btn btn-primary">Save</button>
-      </div>
+      <div class="form-actions"><button type="button" class="button" onclick="closeForm()">Cancel</button><button class="button primary">Save</button></div>
     </form>
   </div>
 </div>
 
 <script>
+let config = {};
+let nodes = [];
 let apps = [];
-let currentFilter = '';
-let domainConfig = { domain: 'your-domain.example.com' };
+let revision = 0;
 
-async function loadConfig() {
+const esc = value => { const element = document.createElement('span'); element.textContent = value || ''; return element.innerHTML; };
+const slug = value => value.trim().toLowerCase().replace(/[^a-z0-9-]+/g,'-').replace(/^-+|-+$/g,'');
+const appETag = app => `"app:${app.id}:${app.generation}"`;
+
+async function request(url, options = {}) {
+  const response = await fetch(url, options);
+  if (!response.ok) throw new Error((await response.text()).trim() || response.statusText);
+  return response;
+}
+
+async function load() {
   try {
-    const res = await fetch('/api/config');
-    domainConfig = await res.json();
-  } catch {}
-  document.querySelector('h1').innerHTML = `<span>Apps</span>.${domainConfig.domain}`;
-  const terminalLink = document.querySelector('.card a[href*="."]');
-  if (terminalLink) terminalLink.href = `https://t.${domainConfig.domain}`;
-}
-
-async function fetchApps() {
-  const url = currentFilter ? `/api/apps?type=${currentFilter}` : '/api/apps';
-  const res = await fetch(url);
-  apps = await res.json();
-  renderApps();
-}
-
-function filterApps(type) {
-  currentFilter = type;
-  document.querySelectorAll('.tab').forEach(t => {
-    t.classList.toggle('active', t.dataset.type === type);
-  });
-  fetchApps();
-}
-
-function onTypeChange() {
-  const t = document.getElementById('app_type').value;
-  document.getElementById('field-target_url').classList.toggle('hidden', t !== 'fe');
-  document.getElementById('field-docs_url').classList.toggle('hidden', t !== 'be');
-  document.getElementById('field-connection_string').classList.toggle('hidden', t !== 'db');
-}
-
-function renderApps() {
-  const grid = document.getElementById('appGrid');
-  if (apps.length === 0) {
-    grid.innerHTML = '<div class="empty">No apps registered. Click "+ Register App" to add one.</div>';
-    return;
+    const [configResponse, nodeResponse, appResponse] = await Promise.all([
+      request('/api/config'), request('/api/v2/nodes'), request('/api/v2/apps')
+    ]);
+    config = await configResponse.json();
+    nodes = await nodeResponse.json();
+    apps = await appResponse.json();
+    revision = appResponse.headers.get('X-Registry-Revision') || '0';
+    document.getElementById('domain').textContent = config.domain;
+    document.getElementById('revision').textContent = `revision ${revision} | local node ${config.node_name}`;
+    render();
+  } catch (error) {
+    document.getElementById('content').innerHTML = `<div class="empty">Registry unavailable: ${esc(error.message)}</div>`;
   }
-  grid.innerHTML = apps.map(app => {
-    const badgeClass = `badge-${app.app_type}`;
-    const badgeLabel = app.app_type === 'fe' ? 'Web' : app.app_type === 'be' ? 'API' : 'DB';
-    const openUrl = (() => {
-      const hostMatch = app.route_rule && app.route_rule.match(/Host\(`([^`]+)`\)/);
-      if (hostMatch) {
-        const pathMatch = app.route_rule.match(/PathPrefix\(`([^`]+)`\)/);
-        return `https://${hostMatch[1]}${pathMatch ? pathMatch[1] : ''}`;
-      }
-      return '#';
-    })();
-    const desc = app.description ? `<p>${escapeHtml(app.description)}</p>` : '';
-    return `<div class="card">
-      <div class="card-header">
-        <div>
-          <div class="card-name">${escapeHtml(app.name)}</div>
-          <span class="badge ${badgeClass}">${badgeLabel}</span>
-        </div>
+}
+
+function render() {
+  const content = document.getElementById('content');
+  if (!nodes.length) { content.innerHTML = '<div class="empty">No machines registered.</div>'; return; }
+  content.innerHTML = nodes.map(node => {
+    const owned = apps.filter(app => app.node_id === node.id);
+    const cards = owned.map(app => appCard(app)).join('') || '<div class="empty">No services registered on this machine.</div>';
+    const authOwner = (node.roles || []).includes('auth') ? '<span class="pill">auth owner</span>' : '';
+    return `<section class="node">
+      <div class="node-head"><h2>${esc(node.name)}</h2>${authOwner}<span class="node-id">${esc(node.id)}</span></div>
+      <div class="grid">
+        <article class="card terminal"><div class="card-top"><h3>Terminal</h3><span class="pill">TTY</span></div><div class="actions"><a class="button" target="_blank" rel="noreferrer" href="https://t--${encodeURIComponent(node.slug)}.${encodeURIComponent(config.domain)}">Open terminal</a></div></article>
+        ${cards}
       </div>
-      <div class="card-body">
-        ${desc}
-        <p><span class="label">Route:</span> <code>${escapeHtml(app.route_rule)}</code></p>
-      </div>
-      <div class="card-actions">
-        <a href="${openUrl}" target="_blank" class="btn btn-sm btn-primary">Open →</a>
-        <a href="/logs/${app.id}" target="_blank" class="btn btn-sm btn-outline">Logs</a>
-        <button class="btn btn-sm btn-outline" onclick="editApp('${app.id}')">Edit</button>
-        <button class="btn btn-sm btn-danger" onclick="deleteApp('${app.id}')">Delete</button>
-      </div>
-    </div>`;
+    </section>`;
   }).join('');
 }
 
-function escapeHtml(s) {
-  if (!s) return '';
-  const d = document.createElement('div');
-  d.textContent = s;
-  return d.innerHTML.replace(/"/g, '&quot;');
+function appCard(app) {
+  const split = app.routes.length > 1;
+  const policy = split ? 'split' : app.routes[0]?.auth || 'browser';
+  return `<article class="card">
+    <div><div class="card-top"><h3>${esc(app.name)}</h3><span class="pill ${policy === 'upstream' ? 'api' : ''} ${app.enabled ? '' : 'off'}">${app.enabled ? esc(policy) : 'disabled'}</span></div>
+    <div class="description">${esc(app.description || 'No description')}</div><div class="target">${esc(app.target_url)}</div></div>
+    <div class="actions"><a class="button primary" target="_blank" rel="noreferrer" href="${esc(app.public_url)}">Open</a><button class="button" onclick="editApp('${app.id}')">Edit</button><button class="button danger" onclick="removeApp('${app.id}')">Delete</button></div>
+  </article>`;
 }
 
-function showForm(app) {
-  document.getElementById('formModal').classList.remove('hidden');
-  onTypeChange();
-  if (app) {
-    document.getElementById('formTitle').textContent = 'Edit App';
-    document.getElementById('editId').value = app.id;
-    document.getElementById('name').value = app.name;
-    document.getElementById('description').value = app.description;
-    document.getElementById('app_type').value = app.app_type;
-    document.getElementById('route_rule').value = app.route_rule;
-    document.getElementById('target_url').value = app.target_url || '';
-    document.getElementById('docs_url').value = app.docs_url || '';
-    document.getElementById('connection_string').value = '';
-    document.getElementById('container_name').value = app.container_name || '';
-    document.getElementById('no_auth').checked = app.no_auth;
-  } else {
-    document.getElementById('formTitle').textContent = 'Register App';
-    document.getElementById('editId').value = '';
-    document.getElementById('appForm').reset();
-    document.getElementById('no_auth').checked = false;
-  }
-  onTypeChange();
+function openForm(app = null) {
+  document.getElementById('modal').classList.remove('hidden');
+  document.getElementById('form').reset();
+  document.getElementById('app-id').value = app?.id || '';
+  document.getElementById('form-title').textContent = app ? 'Edit service' : 'Register service';
+  document.getElementById('node').innerHTML = nodes.map(node => `<option value="${esc(node.id)}">${esc(node.name)}</option>`).join('');
+  document.getElementById('node').value = app?.node_id || config.node_id;
+  document.getElementById('name').value = app?.name || '';
+  document.getElementById('description').value = app?.description || '';
+  document.getElementById('target').value = app?.target_url || '';
+  document.getElementById('policy').value = app ? inferPolicy(app) : 'browser';
 }
 
-function hideForm() {
-  document.getElementById('formModal').classList.add('hidden');
+function closeForm() { document.getElementById('modal').classList.add('hidden'); }
+function editApp(id) { const app = apps.find(value => value.id === id); if (app) openForm(app); }
+function inferPolicy(app) { if (app.routes.length > 1) return 'litellm'; return app.routes[0]?.auth || 'browser'; }
+
+function routeInputs(name, nodeId, policy) {
+  const node = nodes.find(value => value.id === nodeId);
+  const hostname = `${slug(name)}--${node.slug}.${config.domain}`;
+  if (policy === 'browser') return [];
+  if (policy === 'upstream') return [{rule:`Host(\`${hostname}\`)`,priority:100,auth:'upstream'}];
+  return [
+    {rule:`Host(\`${hostname}\`) && !(Path(\`/v1\`) || PathPrefix(\`/v1/\`))`,priority:100,auth:'browser'},
+    {rule:`Host(\`${hostname}\`) && (Path(\`/v1\`) || PathPrefix(\`/v1/\`))`,priority:110,auth:'upstream'}
+  ];
 }
 
-function editApp(id) {
-  const app = apps.find(a => a.id === id);
-  if (app) showForm(app);
-}
-
-async function deleteApp(id) {
-  if (!confirm('Delete this app registration?')) return;
-  const res = await fetch(`/api/apps/${id}`, { method: 'DELETE' });
-  if (res.ok) {
-    showToast('App deleted', 'success');
-    fetchApps();
-  } else {
-    showToast('Failed to delete', 'error');
-  }
-}
-
-async function submitForm(e) {
-  e.preventDefault();
-  const id = document.getElementById('editId').value;
-  const appType = document.getElementById('app_type').value;
+async function saveApp(event) {
+  event.preventDefault();
+  const id = document.getElementById('app-id').value;
+  const existing = apps.find(app => app.id === id);
+  const name = document.getElementById('name').value;
+  const nodeId = document.getElementById('node').value;
   const body = {
-    name: document.getElementById('name').value,
+    name,
+    node_id: nodeId,
     description: document.getElementById('description').value,
-    app_type: appType,
-    route_rule: document.getElementById('route_rule').value,
-    container_name: document.getElementById('container_name').value,
-    no_auth: document.getElementById('no_auth').checked,
+    target_url: document.getElementById('target').value,
+    routes: routeInputs(name, nodeId, document.getElementById('policy').value)
   };
-  if (appType === 'fe') body.target_url = document.getElementById('target_url').value;
-  if (appType === 'be') body.docs_url = document.getElementById('docs_url').value;
-  if (appType === 'db') body.connection_string = document.getElementById('connection_string').value;
-
-  const method = id ? 'PUT' : 'POST';
-  const url = id ? `/api/apps/${id}` : '/api/apps';
-  const res = await fetch(url, {
-    method,
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
-
-  if (res.ok) {
-    showToast(id ? 'App updated' : 'App registered', 'success');
-    hideForm();
-    fetchApps();
-  } else {
-    const text = await res.text();
-    showToast('Error: ' + text, 'error');
-  }
+  try {
+    const response = await request(id ? `/api/v2/apps/${id}` : '/api/v2/apps', {
+      method: id ? 'PUT' : 'POST',
+      headers: {'Content-Type':'application/json', ...(id ? {'If-Match':appETag(existing)} : {})},
+      body: JSON.stringify(body)
+    });
+    await response.json();
+    closeForm(); toast(id ? 'Service updated' : 'Service registered'); await load();
+  } catch (error) { toast(error.message, true); }
 }
 
-function showToast(msg, type) {
-  const el = document.createElement('div');
-  el.className = `toast ${type}`;
-  el.textContent = msg;
-  document.body.appendChild(el);
-  setTimeout(() => el.remove(), 3000);
+async function removeApp(id) {
+  const app = apps.find(value => value.id === id);
+  if (!app || !confirm(`Delete ${app.name}?`)) return;
+  try {
+    await request(`/api/v2/apps/${id}`, {method:'DELETE',headers:{'If-Match':appETag(app)}});
+    toast('Service deleted'); await load();
+  } catch (error) { toast(error.message, true); }
 }
 
-loadConfig().then(() => fetchApps());
+function toast(message, error = false) {
+  const element = document.createElement('div'); element.className = `toast${error ? ' error' : ''}`; element.textContent = message; document.body.appendChild(element); setTimeout(() => element.remove(), 3500);
+}
+
+load();
 </script>
 </body>
 </html>

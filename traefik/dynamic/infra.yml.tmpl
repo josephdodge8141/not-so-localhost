@@ -19,49 +19,46 @@ http:
         status:
           - "401-403"
         service: oauth2-proxy-signin
-        query: "/"
+        query: "/oauth2/sign_in?rd={url}"
+
+    registry-trust:
+      headers:
+        customRequestHeaders:
+          X-NSL-Proxy-Token: "${REGISTRY_PROXY_TOKEN}"
 
   routers:
     oauth2-callback:
       rule: "PathPrefix(`/oauth2`)"
-      priority: 100
+      priority: 1000
       entryPoints:
         - web
       service: oauth2-proxy
 
     keycloak:
       rule: "Host(`auth.${DOMAIN}`)"
-      priority: 10
+      priority: 100
       entryPoints:
         - web
       service: keycloak
 
     registry:
       rule: "Host(`apps.${DOMAIN}`)"
-      priority: 10
+      priority: 100
       entryPoints:
         - web
       middlewares:
         - auth
+        - registry-trust
       service: registry
 
     ttyd:
-      rule: "Host(`t.${DOMAIN}`)"
-      priority: 10
+      rule: "Host(`t--${NODE_SLUG}.${DOMAIN}`)"
+      priority: 100
       entryPoints:
         - web
       middlewares:
         - auth
       service: ttyd
-
-    catchall:
-      rule: "HostRegexp(`{subdomain:[a-z0-9-]+}.${DOMAIN}`) && !Host(`auth.${DOMAIN}`)"
-      priority: 0
-      entryPoints:
-        - web
-      middlewares:
-        - auth
-      service: registry
 
   services:
     keycloak:

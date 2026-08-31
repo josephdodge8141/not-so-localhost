@@ -1,0 +1,2 @@
+# The broker is validated by its dedicated typecheck and test workflow.
+TYPESCRIPT_STANDARD_FILTER_REGEX_EXCLUDE: "broker/.*"

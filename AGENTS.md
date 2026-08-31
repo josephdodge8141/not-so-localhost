@@ -2,105 +2,112 @@
 
 ## Architecture
 
-- `ttyd` runs natively on macOS (LaunchAgent) — tmux-based terminal access via browser.
-- Docker Compose stack: postgres, keycloak, oauth2-proxy, terminal (SSH), cloudflared, backup, registry.
-- Traefik routes by hostname, Cloudflare tunnel is a single wildcard `*.YOUR_DOMAIN` → `traefik:80`.
-- Keycloak + oauth2-proxy provide OIDC auth for `t.YOUR_DOMAIN` and `apps.YOUR_DOMAIN`.
+- Registry state is immutable JSON snapshots in S3 plus a CAS-updated pointer.
+- Every machine has a persistent UUID and required `NODE_NAME`.
+- Apps are direct HTTP services assigned to one node UUID.
+- Each node reconciles only its apps into local Traefik configuration.
+- The enrollment broker owns Cloudflare Tunnel and DNS edit permissions.
+- `apps.joedodge.dev` uses one shared tunnel with a connector on every node.
+- App and terminal names are flat: `<app>--<node>.joedodge.dev` and
+  `t--<node>.joedodge.dev`.
+- Keycloak and local PostgreSQL run only on the global auth-owner node through
+  the Compose `auth` profile.
+- No Swagger UI, pgweb, Docker socket, or registry-managed sidecars exist.
+
+## Startup
+
+`docker compose up -d --build` first runs `node-init`.
+
+- `NODE_NAME` is required.
+- `/var/lib/nsl/node.json` is generated once in the `node_identity` volume.
+- First startup requires `ENROLLMENT_BROKER_URL` and a single-use
+  `NSL_ENROLLMENT_TOKEN`.
+- Enrollment stores node/portal tunnel tokens and a node credential in the same
+  volume with mode `0600`.
+- Reusing a volume with a different `NODE_NAME` fails.
+- Reusing a node name with another UUID fails at the broker/registry.
+
+Treat `node_identity` as credential state. Never destroy it casually with
+`docker compose down -v`.
+
+## Registry Storage
+
+S3 layout:
+
+```text
+nsl/registry/v1/current.json
+nsl/registry/v1/snapshots/<revision>-<sha256>.json
+```
+
+Writes create an immutable snapshot and update `current.json` with `If-Match`.
+Disjoint concurrent mutations reload and retry. Same-app stale generations and
+route/name collisions return conflict. If S3 is unavailable, writes fail.
+
+API v2:
+
+- `GET /api/v2/node`
+- `GET /api/v2/nodes`
+- `GET/POST /api/v2/apps`
+- `GET/PUT/DELETE /api/v2/apps/{id}`
+- `GET /api/v2/auth-owner`
+
+PUT and DELETE require the app ETag in `If-Match`.
+
+## Application Model
+
+One app contains a target URL and one or more routes. Route auth is:
+
+- `browser`: attach the Keycloak/oauth2-proxy middleware.
+- `upstream`: do not redirect; the target validates its own credentials.
+
+The default hostname is `<app-slug>--<node-slug>.<domain>`. LiteLLM uses a
+browser route excluding `/v1` and an upstream-authenticated `/v1` route.
+
+NSL routes applications but does not start them. Database credentials and app
+configuration never enter the global registry.
+
+## Enrollment Broker
+
+The Worker under `broker/` uses a SQLite Durable Object. It:
+
+- issues 1-15 minute single-use enrollment tokens
+- creates remotely managed node and portal tunnels
+- returns only tunnel-scoped and node-scoped credentials
+- creates exact terminal, app, portal, and auth DNS records
+- serializes full tunnel configuration updates
+
+Required Worker secrets: `CLOUDFLARE_API_TOKEN`, `BROKER_ADMIN_TOKEN`, and
+`NODE_CREDENTIAL_KEY`.
+
+## Backup
+
+- Backup tracking is derived from S3; there is no tracker database.
+- Keys are node-namespaced:
+  `backups/v2/<node-uuid>/<target-id>/<timestamp>.sql.gz`.
+- Keycloak is automatically included only when `KEYCLOAK_DB_PASSWORD` exists.
+- Additional targets come from a node-local JSON file and environment-backed
+  secrets.
+- Trigger/list/restore endpoints require `BACKUP_API_TOKEN`.
 
 ## Key Constraints
 
-- No sudo, SSH Remote Login disabled, Tailscale blocked by MDM.
-- Corporate DNS/FortiGuard sinkhole `YOUR_DOMAIN` on corp network — the stack is designed for personal WiFi/cellular access via Cloudflare Tunnel.
-- Postgres:16-alpine has no bash — init scripts must use `#!/bin/sh`.
+- No sudo, SSH Remote Login disabled, and Tailscale blocked by MDM.
+- Corporate DNS/FortiGuard blocks the public domain on the corporate network.
+- Docker builders and cloudflared may require `cloudflared/ca-bundle.pem` for
+  corporate TLS inspection.
+- `postgres:16-alpine` init scripts use `/bin/sh`, not bash.
 
-## Network Layout
+## Validation
 
-- `edge` — tunnel-facing services (traefik, keycloak, oauth2-proxy, terminal, cloudflared, backup, registry).
-- `internal` — database only (postgres, keycloak, backup, registry).
-
-## Hostname Routing (Traefik)
-
-| Hostname | Target |
-|---|---|
-| `auth.YOUR_DOMAIN` | Keycloak (OIDC issuer) |
-| `t.YOUR_DOMAIN` | oauth2-proxy → host.docker.internal:7681 |
-| `apps.YOUR_DOMAIN` | oauth2-proxy → registry:7272 |
-
-## OIDC Flow
-
-oauth2-proxy uses `--oidc-issuer-url=http://keycloak:8080/realms/local` for server-side calls and `--login-url=https://auth.${DOMAIN}/realms/local/protocol/openid-connect/auth` for browser redirects. Keycloak runs with `KC_HOSTNAME=http://keycloak:8080` (internal) and `KC_HOSTNAME_STRICT=false` + `KC_PROXY_HEADERS=xforwarded` to accept proxied requests from Traefik.
-
-## Keycloak Config
-
-- Realm: `local`
-- Clients: `ttyd`, `registry` (confidential, standard flow, redirect URIs match oauth2-proxy config)
-- `registry` client config (manual Keycloak step):
-  - Client ID: `registry`
-  - Client protocol: openid-connect
-  - Standard flow enabled
-  - Valid redirect URIs: `https://apps.YOUR_DOMAIN/oauth2/callback`, `http://localhost:4182/oauth2/callback`
-  - Client authentication ON
-  - Client secret matches `OAUTH2_CLIENT_SECRET_REGISTRY`
-- Users: `joe` (password: `password`)
-- Admin: `admin` (password in `.env` as `KEYCLOAK_ADMIN_PASSWORD`)
-
-## Secrets
-
-All in `.env` (gitignored). Generated via `openssl rand -base64 14` or Node.js crypto. Placeholders in `.env.example`.
-
-## Testing
-
-From personal WiFi/cellular (not corp network):
-- `t.YOUR_DOMAIN` → Keycloak login → terminal
-- `auth.YOUR_DOMAIN` → Keycloak admin console
-- `apps.YOUR_DOMAIN` → Keycloak login → App Registry
-
-## Backup Service
-
-The `backup/` service periodically pg_dumps registered databases to S3.
-
-- Port: `:7273`
-- Endpoints: `GET /api/backups`, `POST /api/backups/{db}/backup`, `POST /api/backups/{db}/restore`
-- Hardcoded DBs: `keycloak`, `registry` (keyed by name)
-- Discovered DBs: fetched from registry API (`GET /internal/backup-targets`), keyed by app UUID
-- S3 path: `s3://<bucket>/backups/<uuid-or-name>/<timestamp>.sql.gz`
-- Interval: configurable via `BACKUP_INTERVAL` (default `1h`)
-- S3 is the store of record: backups are written to S3 first; local (`BACKUP_DIR`) files are deleted once the S3 upload succeeds. If S3 is down, an emergency local copy is kept and the tracker's `last_backup_at` only advances on S3 success; the next successful upload wipes all local copies.
-- Stale backups: apps deleted from registry have their backups pruned after `STALE_BACKUP_DAYS` (default 30). Pruning runs at startup and every sweep, plus a reconcile pass that also deletes (a) local files that already exist in S3 and (b) untracked orphan prefixes older than 30 days. `DeletePrefix` refuses empty prefixes. The `POST /api/backups/{db}/restore` endpoint refuses restore for stale orphaned backups and deletes them instead.
-- `POSTGRES_ADMIN_PASSWORD` must be set for the restore endpoint — it drops and recreates the target DB as the `postgres` superuser. Restore returns 500 without it.
-
-### S3 Bucket Setup
-
-```bash
-# Create bucket (AWS credentials must be configured)
-aws s3 mb s3://not-so-localhost-backups --region us-east-1
-
-# Verify
-aws s3 ls s3://not-so-localhost-backups
-```
-
-IAM policy (minimal) for backup service credentials:
-```json
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Effect": "Allow",
-      "Action": ["s3:PutObject", "s3:GetObject", "s3:DeleteObject", "s3:ListBucket"],
-      "Resource": [
-        "arn:aws:s3:::not-so-localhost-backups",
-        "arn:aws:s3:::not-so-localhost-backups/backups/*"
-      ]
-    }
-  ]
-}
+```sh
+cd registry && go test -race ./... && go vet ./...
+cd ../node-init && go test -race ./...
+cd ../backup && go test -race ./... && go vet ./...
+cd ../broker && npm run typecheck && npm test && npm run deploy:dry
+docker compose --env-file .env.example config --quiet
+docker compose --env-file .env.example build node-init registry backup cloudflared-node
 ```
 
 ## Skills
 
-- `.agents/skills/registry-api/SKILL.md` — API versioning conventions, when to bump, how to add a new version, Git tagging workflow
-
-## To Do
-
-- [ ] Test full auth flow from iPhone (not possible from corp network).
-- [ ] Set up Keycloak HTTPS if needed (currently HTTP behind Traefik which terminates at tunnel).
+- `.agents/skills/registry-api/SKILL.md` - API versioning conventions

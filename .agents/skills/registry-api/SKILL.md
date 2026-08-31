@@ -7,28 +7,23 @@ contracts between the server and the `nsl` CLI.
 
 | Prefix | Purpose | Stability |
 |--------|---------|-----------|
-| `/api/v1/` | Active API contract for `nsl` CLI and external consumers | Stable — breaking changes bump to v2 |
-| `/api/` | Legacy routes (kept for backward compat) | Same endpoints as v1 but may be removed in the future |
-| `/internal/` | Internal infra endpoints (backup tokens, etc.) | No stability guarantee |
+| `/api/v2/` | Active distributed direct-service API used by `nsl` | Stable |
+| `/api/v1/` | Legacy single-route adapter | Compatibility only |
+| `/api/` | Legacy unversioned adapter | Compatibility only |
 
 ## Version endpoint
 
-`GET /api/v1/version` returns `{"version":"..."}`.
+`GET /api/v2/version` returns `{"version":"..."}`.
 
 The version is embedded at build time via `-ldflags="-X main.version=$VERSION"`.
 When built with `docker compose`, the `VERSION` build arg controls this
 (default `"dev"`).
 
-The `nsl` CLI checks this endpoint on each command and prints a warning if
-the CLI version differs from the server version:
-
-```
-warning: nsl v0.1.0, registry dev (use --no-version-check to suppress)
-```
+The current `nsl` CLI calls v2 directly.
 
 ## When to bump the API version
 
-- `/api/v1/` → `/api/v2/` when an existing endpoint changes its request or
+- `/api/v2/` → `/api/v3/` when an existing endpoint changes its request or
   response shape in a backward-incompatible way.
 - Adding new fields to responses (not removing/renaming existing ones) does
   NOT require a bump.

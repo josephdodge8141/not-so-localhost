@@ -1,4 +1,0 @@
-# The broker owns its TypeScript compiler configuration and validates through
-# `npm run typecheck`; ts-standard cannot resolve that nested project in MegaLinter.
-DISABLE_LINTERS:
-  - TYPESCRIPT_STANDARD

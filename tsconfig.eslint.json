@@ -1,0 +1,7 @@
+{
+  "extends": "./broker/tsconfig.json",
+  "compilerOptions": {
+    "types": []
+  },
+  "include": ["broker/src/**/*.ts", "broker/tests/**/*.ts"]
+}

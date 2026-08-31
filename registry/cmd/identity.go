@@ -1,3 +1,4 @@
+// Package main runs the distributed Not-So-Localhost app registry.
 package main
 
 import (
@@ -13,6 +14,7 @@ import (
 	"time"
 )
 
+// NodeIdentity is the persistent identity stored in a node's credential volume.
 type NodeIdentity struct {
 	ID        string    `json:"id"`
 	Name      string    `json:"name"`
@@ -22,6 +24,7 @@ type NodeIdentity struct {
 
 var invalidSlugCharacters = regexp.MustCompile(`[^a-z0-9-]+`)
 
+// LoadOrCreateIdentity loads the persisted identity or creates it atomically.
 func LoadOrCreateIdentity(path, nodeName string) (NodeIdentity, error) {
 	nodeName = strings.TrimSpace(nodeName)
 	slug := slugify(nodeName)

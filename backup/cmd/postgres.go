@@ -1,3 +1,4 @@
+// Package main runs the NSL node-scoped backup service.
 package main
 
 import (
@@ -9,12 +10,15 @@ import (
 	"strconv"
 )
 
+// PostgresDumper dumps and restores PostgreSQL backup targets.
 type PostgresDumper struct {
 	AdminUser string
 }
 
+// Type returns the target type handled by this dumper.
 func (d *PostgresDumper) Type() string { return "postgres" }
 
+// Dump streams a PostgreSQL dump to w.
 func (d *PostgresDumper) Dump(ctx context.Context, info DBInfo, w io.Writer) error {
 	var cmd *exec.Cmd
 	if info.ConnectionString != "" {
@@ -34,6 +38,7 @@ func (d *PostgresDumper) Dump(ctx context.Context, info DBInfo, w io.Writer) err
 	return cmd.Run()
 }
 
+// Restore recreates a database and restores the supplied dump.
 func (d *PostgresDumper) Restore(ctx context.Context, info DBInfo, r io.Reader, adminPassword string) error {
 	port := strconv.Itoa(info.Port)
 

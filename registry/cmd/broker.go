@@ -1,3 +1,4 @@
+// Package main runs the distributed Not-So-Localhost app registry.
 package main
 
 import (
@@ -13,6 +14,7 @@ import (
 	"time"
 )
 
+// BrokerClient provisions exact DNS and tunnel routes for one node.
 type BrokerClient struct {
 	baseURL        string
 	credentialFile string
@@ -21,6 +23,7 @@ type BrokerClient struct {
 	authClaimToken string
 }
 
+// NewBrokerClient creates a node-authenticated enrollment broker client.
 func NewBrokerClient(baseURL, credentialFile, nodeSlug string) *BrokerClient {
 	baseURL = strings.TrimRight(strings.TrimSpace(baseURL), "/")
 	if baseURL == "" {
@@ -32,10 +35,12 @@ func NewBrokerClient(baseURL, credentialFile, nodeSlug string) *BrokerClient {
 	}
 }
 
+// EnsureApp provisions one app hostname for this node.
 func (c *BrokerClient) EnsureApp(ctx context.Context, appSlug string) error {
 	return c.put(ctx, fmt.Sprintf("/v1/nodes/%s/apps/%s", url.PathEscape(c.nodeSlug), url.PathEscape(appSlug)))
 }
 
+// SyncApps makes the broker's app hostname set match appSlugs.
 func (c *BrokerClient) SyncApps(ctx context.Context, appSlugs []string) error {
 	body, err := json.Marshal(map[string][]string{"apps": appSlugs})
 	if err != nil {
@@ -44,6 +49,7 @@ func (c *BrokerClient) SyncApps(ctx context.Context, appSlugs []string) error {
 	return c.putBody(ctx, fmt.Sprintf("/v1/nodes/%s/apps", url.PathEscape(c.nodeSlug)), body)
 }
 
+// EnsureAuth assigns the global auth hostname to this authorized node.
 func (c *BrokerClient) EnsureAuth(ctx context.Context) error {
 	return c.put(ctx, fmt.Sprintf("/v1/nodes/%s/auth", url.PathEscape(c.nodeSlug)))
 }

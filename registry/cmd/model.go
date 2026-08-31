@@ -1,16 +1,21 @@
+// Package main runs the distributed Not-So-Localhost app registry.
 package main
 
 import "time"
 
 const stateSchemaVersion = 1
 
+// AuthPolicy controls whether Traefik delegates authentication to Keycloak.
 type AuthPolicy string
 
 const (
-	AuthBrowser  AuthPolicy = "browser"
+	// AuthBrowser protects browser routes with Keycloak.
+	AuthBrowser AuthPolicy = "browser"
+	// AuthUpstream leaves authentication to the target service.
 	AuthUpstream AuthPolicy = "upstream"
 )
 
+// Node identifies an enrolled NSL machine.
 type Node struct {
 	ID        string    `json:"id"`
 	Name      string    `json:"name"`
@@ -20,6 +25,7 @@ type Node struct {
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
+// Route describes one Traefik rule for an application.
 type Route struct {
 	ID       string     `json:"id"`
 	Rule     string     `json:"rule"`
@@ -27,6 +33,7 @@ type Route struct {
 	Auth     AuthPolicy `json:"auth"`
 }
 
+// App is an HTTP service registered to one node.
 type App struct {
 	ID          string    `json:"id"`
 	NodeID      string    `json:"node_id"`
@@ -42,12 +49,14 @@ type App struct {
 	UpdatedAt   time.Time `json:"updated_at"`
 }
 
+// RouteInput contains mutable route fields accepted by the API.
 type RouteInput struct {
 	Rule     string     `json:"rule"`
 	Priority int        `json:"priority,omitempty"`
 	Auth     AuthPolicy `json:"auth"`
 }
 
+// AppInput contains mutable application fields accepted by the API.
 type AppInput struct {
 	NodeID      string       `json:"node_id,omitempty"`
 	Name        string       `json:"name"`
@@ -57,6 +66,7 @@ type AppInput struct {
 	Enabled     *bool        `json:"enabled,omitempty"`
 }
 
+// RegistryState is one immutable snapshot of nodes and applications.
 type RegistryState struct {
 	SchemaVersion    int       `json:"schema_version"`
 	Revision         uint64    `json:"revision"`
@@ -67,6 +77,7 @@ type RegistryState struct {
 	Apps             []App     `json:"apps"`
 }
 
+// SnapshotPointer identifies and verifies the current immutable snapshot.
 type SnapshotPointer struct {
 	SchemaVersion int       `json:"schema_version"`
 	Revision      uint64    `json:"revision"`

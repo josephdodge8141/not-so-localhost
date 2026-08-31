@@ -7,8 +7,8 @@ umask 077
 read -rsp "Cloudflare API token: " cloudflare_api_token
 printf '\n'
 if [[ -z "$cloudflare_api_token" ]]; then
-  printf 'Cloudflare API token is required.\n' >&2
-  exit 1
+	printf 'Cloudflare API token is required.\n' >&2
+	exit 1
 fi
 
 broker_admin_token="$(openssl rand -hex 32)"
@@ -21,7 +21,7 @@ printf '%s' "$node_credential_key" | npx wrangler secret put NODE_CREDENTIAL_KEY
 printf '%s' "$auth_claim_token" | npx wrangler secret put AUTH_CLAIM_TOKEN
 
 secrets_file="../.broker-secrets.env"
-cat > "$secrets_file" <<EOF
+cat >"$secrets_file" <<EOF
 NSL_BROKER_URL=https://nsl-enrollment-broker.josephdodge8141.workers.dev
 NSL_BROKER_ADMIN_TOKEN=$broker_admin_token
 NSL_AUTH_CLAIM_TOKEN=$auth_claim_token

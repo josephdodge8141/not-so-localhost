@@ -1,3 +1,4 @@
+// Package main runs the distributed Not-So-Localhost app registry.
 package main
 
 import (
@@ -13,6 +14,7 @@ import (
 	smithyhttp "github.com/aws/smithy-go/transport/http"
 )
 
+// S3Config selects the registry bucket and AWS region.
 type S3Config struct {
 	Bucket string
 	Region string
@@ -23,11 +25,13 @@ type s3API interface {
 	PutObject(context.Context, *s3.PutObjectInput, ...func(*s3.Options)) (*s3.PutObjectOutput, error)
 }
 
+// S3ObjectStore persists registry objects in S3.
 type S3ObjectStore struct {
 	client s3API
 	bucket string
 }
 
+// NewS3ObjectStore creates an S3-backed registry object store.
 func NewS3ObjectStore(ctx context.Context, cfg S3Config) (*S3ObjectStore, error) {
 	if cfg.Bucket == "" {
 		return nil, fmt.Errorf("REGISTRY_S3_BUCKET is required")
@@ -39,6 +43,7 @@ func NewS3ObjectStore(ctx context.Context, cfg S3Config) (*S3ObjectStore, error)
 	return &S3ObjectStore{client: s3.NewFromConfig(awsConfig), bucket: cfg.Bucket}, nil
 }
 
+// Get retrieves an object and its S3 ETag.
 func (s *S3ObjectStore) Get(ctx context.Context, key string) (StoredObject, error) {
 	result, err := s.client.GetObject(ctx, &s3.GetObjectInput{
 		Bucket: aws.String(s.bucket),
@@ -55,6 +60,7 @@ func (s *S3ObjectStore) Get(ctx context.Context, key string) (StoredObject, erro
 	return StoredObject{Body: body, ETag: aws.ToString(result.ETag)}, nil
 }
 
+// Put performs a conditional S3 object write.
 func (s *S3ObjectStore) Put(ctx context.Context, key string, body []byte, options PutOptions) (string, error) {
 	input := &s3.PutObjectInput{
 		Bucket:      aws.String(s.bucket),

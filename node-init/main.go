@@ -19,6 +19,7 @@ import (
 	"time"
 )
 
+// Identity is the persistent identity assigned to one NSL node.
 type Identity struct {
 	ID        string    `json:"id"`
 	Name      string    `json:"name"`
@@ -26,6 +27,7 @@ type Identity struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 
+// Enrollment contains the scoped credentials returned by the broker.
 type Enrollment struct {
 	NodeID         string `json:"node_id"`
 	NodeName       string `json:"node_name"`

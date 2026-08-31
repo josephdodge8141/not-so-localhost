@@ -3,6 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="Shared Not-So-Localhost application inventory">
+<meta name="keywords" content="NSL, applications, nodes, routing">
 <title>NSL Apps</title>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -27,7 +29,10 @@ main{padding:28px clamp(18px,4vw,48px) 60px;max-width:1440px;margin:auto}
 </head>
 <body>
 <header>
-  <div><h1><span>apps</span>.<span id="domain">joedodge.dev</span></h1><div class="subtitle" id="revision">shared registry</div></div>
+  <div>
+    <h1><span>apps</span>.<span id="domain">joedodge.dev</span></h1>
+    <div class="subtitle" id="revision">shared registry</div>
+  </div>
   <button class="button primary" onclick="openForm()">Register service</button>
 </header>
 <main id="content"><div class="empty">Loading registry state...</div></main>

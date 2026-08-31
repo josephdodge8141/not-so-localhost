@@ -24,6 +24,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 )
 
+// Config holds backup service runtime settings.
 type Config struct {
 	BackupInterval        time.Duration
 	S3Bucket              string
@@ -37,11 +38,13 @@ type Config struct {
 	PostgresAdminPassword string
 }
 
+// NodeIdentity identifies the node namespace used for backup keys.
 type NodeIdentity struct {
 	ID   string `json:"id"`
 	Name string `json:"name"`
 }
 
+// TargetConfig describes a node-local backup target.
 type TargetConfig struct {
 	ID          string `json:"id"`
 	Label       string `json:"label"`
@@ -61,6 +64,7 @@ type backupTarget struct {
 	Label string
 }
 
+// BackupRecord summarizes stored history for one target.
 type BackupRecord struct {
 	TargetID      string     `json:"target_id"`
 	DisplayName   string     `json:"display_name"`
@@ -70,6 +74,7 @@ type BackupRecord struct {
 	S3Prefix      string     `json:"s3_prefix"`
 }
 
+// Server runs scheduled and requested node-scoped backups.
 type Server struct {
 	cfg      Config
 	node     NodeIdentity
@@ -486,7 +491,7 @@ func (s *Server) handleBackup(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]string{"status": "ok", "target": target.ID})
 }
 
-func (s *Server) handleRestore(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleRestore(w http.ResponseWriter, _ *http.Request) {
 	http.Error(w, "restore is disabled until staged restore validation is implemented", http.StatusNotImplemented)
 }
 

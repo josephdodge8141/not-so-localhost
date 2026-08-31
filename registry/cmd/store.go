@@ -1,3 +1,4 @@
+// Package main runs the distributed Not-So-Localhost app registry.
 package main
 
 import (
@@ -9,38 +10,49 @@ import (
 )
 
 var (
-	ErrNotFound     = errors.New("not found")
+	// ErrNotFound indicates that an object or registry entity does not exist.
+	ErrNotFound = errors.New("not found")
+	// ErrPrecondition indicates a failed conditional write or stale generation.
 	ErrPrecondition = errors.New("precondition failed")
-	ErrConflict     = errors.New("conflict")
-	ErrValidation   = errors.New("validation failed")
-	ErrNoChange     = errors.New("no change")
+	// ErrConflict indicates a conflicting node, app, or route.
+	ErrConflict = errors.New("conflict")
+	// ErrValidation indicates invalid input.
+	ErrValidation = errors.New("validation failed")
+	// ErrNoChange indicates an idempotent mutation.
+	ErrNoChange = errors.New("no change")
 )
 
+// StoredObject contains object bytes and their concurrency token.
 type StoredObject struct {
 	Body []byte
 	ETag string
 }
 
+// PutOptions configures a conditional object write.
 type PutOptions struct {
 	ContentType string
 	IfMatch     string
 	IfNoneMatch bool
 }
 
+// ObjectStore provides the registry's conditional object operations.
 type ObjectStore interface {
 	Get(context.Context, string) (StoredObject, error)
 	Put(context.Context, string, []byte, PutOptions) (string, error)
 }
 
+// MemoryObjectStore is an in-memory ObjectStore used by tests.
 type MemoryObjectStore struct {
 	mu      sync.Mutex
 	objects map[string]StoredObject
 }
 
+// NewMemoryObjectStore creates an empty in-memory object store.
 func NewMemoryObjectStore() *MemoryObjectStore {
 	return &MemoryObjectStore{objects: make(map[string]StoredObject)}
 }
 
+// Get returns a copy of the object stored at key.
 func (s *MemoryObjectStore) Get(_ context.Context, key string) (StoredObject, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -51,6 +63,7 @@ func (s *MemoryObjectStore) Get(_ context.Context, key string) (StoredObject, er
 	return StoredObject{Body: append([]byte(nil), object.Body...), ETag: object.ETag}, nil
 }
 
+// Put conditionally writes an object and returns its ETag.
 func (s *MemoryObjectStore) Put(_ context.Context, key string, body []byte, options PutOptions) (string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

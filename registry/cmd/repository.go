@@ -1,3 +1,4 @@
+// Package main runs the distributed Not-So-Localhost app registry.
 package main
 
 import (
@@ -16,12 +17,14 @@ import (
 
 const maxMutationAttempts = 64
 
+// Repository coordinates immutable snapshots through conditional object writes.
 type Repository struct {
 	store  ObjectStore
 	prefix string
 	now    func() time.Time
 }
 
+// NewRepository creates a repository under the supplied object key prefix.
 func NewRepository(store ObjectStore, prefix string) *Repository {
 	return &Repository{store: store, prefix: strings.TrimSuffix(prefix, "/"), now: func() time.Time { return time.Now().UTC() }}
 }
@@ -34,6 +37,7 @@ func (r *Repository) initializedKey() string {
 	return r.prefix + "/initialized"
 }
 
+// Load retrieves and verifies the current registry snapshot.
 func (r *Repository) Load(ctx context.Context) (RegistryState, string, error) {
 	current, err := r.store.Get(ctx, r.currentKey())
 	if errors.Is(err, ErrNotFound) {
@@ -178,6 +182,7 @@ func (r *Repository) pointerMatches(ctx context.Context, snapshotKey, digest str
 	return json.Unmarshal(object.Body, &pointer) == nil && pointer.SnapshotKey == snapshotKey && pointer.SHA256 == digest
 }
 
+// RegisterNode adds or idempotently refreshes an enrolled node.
 func (r *Repository) RegisterNode(ctx context.Context, identity NodeIdentity) error {
 	_, err := r.mutate(ctx, func(state *RegistryState) error {
 		for index, node := range state.Nodes {
@@ -204,6 +209,7 @@ func (r *Repository) RegisterNode(ctx context.Context, identity NodeIdentity) er
 	return err
 }
 
+// ClaimAuthOwner assigns the singleton authentication role to a node.
 func (r *Repository) ClaimAuthOwner(ctx context.Context, nodeID string) error {
 	_, err := r.mutate(ctx, func(state *RegistryState) error {
 		if _, ok := findNode(state.Nodes, nodeID); !ok {
@@ -227,6 +233,7 @@ func (r *Repository) ClaimAuthOwner(ctx context.Context, nodeID string) error {
 	return err
 }
 
+// CreateApp registers a new application and its routes.
 func (r *Repository) CreateApp(ctx context.Context, input AppInput, domain string) (App, uint64, error) {
 	id, err := randomUUID()
 	if err != nil {
@@ -256,6 +263,7 @@ func (r *Repository) CreateApp(ctx context.Context, input AppInput, domain strin
 	return created, state.Revision, err
 }
 
+// UpdateApp replaces an application when its generation still matches.
 func (r *Repository) UpdateApp(ctx context.Context, id string, generation uint64, input AppInput, domain string) (App, uint64, error) {
 	now := r.now()
 	var updated App
@@ -298,6 +306,7 @@ func (r *Repository) UpdateApp(ctx context.Context, id string, generation uint64
 	return updated, state.Revision, err
 }
 
+// DeleteApp removes an application when its generation still matches.
 func (r *Repository) DeleteApp(ctx context.Context, id string, generation uint64) (uint64, error) {
 	state, err := r.mutate(ctx, func(state *RegistryState) error {
 		for index, app := range state.Apps {

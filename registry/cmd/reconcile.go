@@ -1,3 +1,4 @@
+// Package main runs the distributed Not-So-Localhost app registry.
 package main
 
 import (
@@ -11,6 +12,7 @@ import (
 	"time"
 )
 
+// Reconciler synchronizes one node's routes and broker-managed hostnames.
 type Reconciler struct {
 	repo            *Repository
 	nodeID          string
@@ -22,10 +24,12 @@ type Reconciler struct {
 	brokerRevision  uint64
 }
 
+// NewReconciler creates a route reconciler for one enrolled node.
 func NewReconciler(repo *Repository, nodeID, directory string, broker *BrokerClient, authOwner bool) *Reconciler {
 	return &Reconciler{repo: repo, nodeID: nodeID, directory: directory, broker: broker, trigger: make(chan struct{}, 1), authOwner: authOwner}
 }
 
+// Trigger requests reconciliation without blocking the caller.
 func (r *Reconciler) Trigger() {
 	select {
 	case r.trigger <- struct{}{}:
@@ -33,6 +37,7 @@ func (r *Reconciler) Trigger() {
 	}
 }
 
+// Run reconciles on triggers and at the supplied interval.
 func (r *Reconciler) Run(ctx context.Context, interval time.Duration) {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
@@ -49,6 +54,7 @@ func (r *Reconciler) Run(ctx context.Context, interval time.Duration) {
 	}
 }
 
+// Reconcile renders local routes and synchronizes broker hostnames.
 func (r *Reconciler) Reconcile(ctx context.Context) error {
 	if r.directory == "" {
 		return nil

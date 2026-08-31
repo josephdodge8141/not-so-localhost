@@ -21,6 +21,7 @@ var frontend embed.FS
 
 var version = "dev"
 
+// Server serves the registry API and shared inventory UI.
 type Server struct {
 	repo       *Repository
 	identity   NodeIdentity

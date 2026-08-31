@@ -1,144 +1,251 @@
+name: not-so-localhost
+
 services:
-  postgres:
-    image: postgres:16-alpine
-    env_file: ./postgres/.env
+  node-init:
+    build:
+      context: ./node-init
+      secrets: [corp_ca]
+    environment:
+      NODE_NAME: ${NODE_NAME:?NODE_NAME is required}
+      ENROLLMENT_BROKER_URL: ${ENROLLMENT_BROKER_URL:?ENROLLMENT_BROKER_URL is required}
+      NSL_ENROLLMENT_TOKEN: ${NSL_ENROLLMENT_TOKEN:-}
+      NODE_STATE_DIR: /var/lib/nsl
     volumes:
-      - postgres_data:/var/lib/postgresql/data
-      - ./postgres/init:/docker-entrypoint-initdb.d
-    networks:
-      - edge
-      - internal
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U admin"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-    restart: unless-stopped
+      - node_identity:/var/lib/nsl
+    restart: "no"
 
   config-gen:
-    image: alpine:latest
+    build:
+      context: ./config-gen
+      secrets: [corp_ca]
     command:
       - sh
-      - -c
+      - -ec
       - |
-        apk add --no-cache gettext
-        envsubst '$${DOMAIN}' < /work/traefik/dynamic/infra.yml.tmpl > /work/traefik/dynamic/infra.yml
-        envsubst '$${DOMAIN}' < /work/cloudflared/config.yml.tmpl > /work/cloudflared/config.yml
+        NODE_SLUG="$$(printf '%s' "$${NODE_NAME}" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9-]+/-/g; s/^-+|-+$$//g')"
+        test -n "$${NODE_SLUG}"
+        export NODE_SLUG
+        tmp="$$(mktemp /output/.infra.yml.XXXXXX)"
+        envsubst '$${DOMAIN} $${NODE_SLUG} $${REGISTRY_PROXY_TOKEN}' < /templates/infra.yml.tmpl > "$${tmp}"
+        test -s "$${tmp}"
+        mv "$${tmp}" /output/infra.yml
     environment:
-      DOMAIN: ${DOMAIN}
+      DOMAIN: ${DOMAIN:?DOMAIN is required}
+      NODE_NAME: ${NODE_NAME:?NODE_NAME is required}
+      REGISTRY_PROXY_TOKEN: ${REGISTRY_PROXY_TOKEN:?REGISTRY_PROXY_TOKEN is required}
     volumes:
-      - .:/work
-
-  keycloak:
-    image: quay.io/keycloak/keycloak:latest
-    env_file: ./keycloak/.env
-    command: start-dev
-    networks:
-      - edge
-      - internal
+      - ./traefik/dynamic/infra.yml.tmpl:/templates/infra.yml.tmpl:ro
+      - traefik_dynamic:/output
     depends_on:
-      postgres:
-        condition: service_healthy
-    restart: unless-stopped
+      node-init:
+        condition: service_completed_successfully
+    restart: "no"
 
-  terminal:
-    build: .
+  keycloak-config-gen:
+    build:
+      context: ./config-gen
+      secrets: [corp_ca]
+    profiles: ["auth"]
+    command:
+      - sh
+      - -ec
+      - |
+        : "$${KEYCLOAK_USER_PASSWORD:?KEYCLOAK_USER_PASSWORD is required for the auth profile}"
+        : "$${KEYCLOAK_ADMIN_PASSWORD:?KEYCLOAK_ADMIN_PASSWORD is required for the auth profile}"
+        envsubst '$${DOMAIN} $${OAUTH2_CLIENT_SECRET_REGISTRY} $${KEYCLOAK_USER_PASSWORD}' < /templates/realm.json.tmpl > /keycloak-import/local-realm.json
+    environment:
+      DOMAIN: ${DOMAIN:?DOMAIN is required}
+      OAUTH2_CLIENT_SECRET_REGISTRY: ${OAUTH2_CLIENT_SECRET_REGISTRY:?OAUTH2_CLIENT_SECRET_REGISTRY is required}
+      KEYCLOAK_USER_PASSWORD: ${KEYCLOAK_USER_PASSWORD:-}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-}
     volumes:
-      - ~/.ssh/id_ed25519.pub:/import/id_ed25519.pub:ro
-      - terminal_data:/data
-    networks:
-      - edge
-    restart: unless-stopped
+      - ./keycloak/realm.json.tmpl:/templates/realm.json.tmpl:ro
+      - keycloak_import:/keycloak-import
+    depends_on:
+      node-init:
+        condition: service_completed_successfully
+    restart: "no"
 
   registry:
     build:
       context: ./registry
       args:
         VERSION: ${REGISTRY_VERSION:-dev}
+      secrets: [corp_ca]
     ports:
-      - "7272:7272"
+      - "127.0.0.1:7272:7272"
     env_file: ./registry/.env
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:rw
-      - ./traefik/dynamic:/traefik-routes:rw
-    depends_on:
-      postgres:
-        condition: service_healthy
     environment:
+      DOMAIN: ${DOMAIN:?DOMAIN is required}
+      NODE_NAME: ${NODE_NAME:?NODE_NAME is required}
+      NODE_IDENTITY_FILE: /var/lib/nsl/node.json
+      REGISTRY_S3_BUCKET: ${REGISTRY_S3_BUCKET:?REGISTRY_S3_BUCKET is required}
+      REGISTRY_S3_PREFIX: ${REGISTRY_S3_PREFIX:-nsl/registry/v1}
+      AWS_REGION: ${AWS_REGION:-us-east-1}
       TRAEFIK_ROUTES_DIR: /traefik-routes
-    networks:
-      - edge
-      - internal
-    restart: unless-stopped
-
-  backup:
-    build: ./backup
-    env_file: ./backup/.env
-    networks:
-      - edge
-      - internal
-    depends_on:
-      - postgres
-      - registry
+      ENROLLMENT_BROKER_URL: ${ENROLLMENT_BROKER_URL:?ENROLLMENT_BROKER_URL is required}
+      NODE_CREDENTIAL_FILE: /var/lib/nsl/node-credential
+      NSL_AUTH_OWNER: ${NSL_AUTH_OWNER:-false}
+      NSL_AUTH_CLAIM_TOKEN: ${NSL_AUTH_CLAIM_TOKEN:-}
+      REGISTRY_API_TOKEN: ${REGISTRY_API_TOKEN:?REGISTRY_API_TOKEN is required}
+      REGISTRY_PROXY_TOKEN: ${REGISTRY_PROXY_TOKEN:?REGISTRY_PROXY_TOKEN is required}
     volumes:
-      - backup_data:${BACKUP_DIR:-/backups}
-    restart: unless-stopped
-
-  cloudflared:
-    build: ./cloudflared
-    env_file: ./cloudflared/.env
-    command: tunnel --protocol http2 --config /etc/cloudflared/config.yml run
-    volumes:
-      - ./cloudflared:/etc/cloudflared
+      - node_identity:/var/lib/nsl
+      - traefik_dynamic:/traefik-routes
     depends_on:
-      traefik:
-        condition: service_started
+      node-init:
+        condition: service_completed_successfully
       config-gen:
         condition: service_completed_successfully
-    networks:
-      - edge
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:7272/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    networks: [edge]
     restart: unless-stopped
 
   traefik:
     image: traefik:v3.1
-    command:
-      - "--configFile=/etc/traefik/traefik.yml"
+    command: ["--configFile=/etc/traefik/traefik.yml"]
     ports:
-      - "80:80"
+      - "127.0.0.1:80:80"
     volumes:
-      - ./traefik:/etc/traefik:ro
+      - ./traefik/traefik.yml:/etc/traefik/traefik.yml:ro
+      - traefik_dynamic:/etc/traefik/dynamic:ro
     depends_on:
       config-gen:
         condition: service_completed_successfully
-    networks:
-      - edge
+      registry:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "traefik", "healthcheck", "--ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    networks: [edge]
     restart: unless-stopped
 
   oauth2-proxy:
     image: quay.io/oauth2-proxy/oauth2-proxy:latest
-    env_file: ./oauth2-proxy/.env
+    environment:
+      OAUTH2_PROXY_CLIENT_ID: registry
+      OAUTH2_PROXY_CLIENT_SECRET: ${OAUTH2_CLIENT_SECRET_REGISTRY:?OAUTH2_CLIENT_SECRET_REGISTRY is required}
+      OAUTH2_PROXY_COOKIE_SECRET: ${OAUTH2_COOKIE_SECRET:?OAUTH2_COOKIE_SECRET is required}
+      OAUTH2_PROXY_REDIRECT_URL: https://apps.${DOMAIN}/oauth2/callback
     command:
       - "--provider=keycloak-oidc"
-      - "--oidc-issuer-url=http://keycloak:8080/realms/local"
-      - "--login-url=https://auth.${DOMAIN}/realms/local/protocol/openid-connect/auth"
-      - "--redeem-url=http://keycloak:8080/realms/local/protocol/openid-connect/token"
-      - "--oidc-jwks-url=http://keycloak:8080/realms/local/protocol/openid-connect/certs"
-      - "--insecure-oidc-skip-issuer-verification"
-      - "--skip-oidc-discovery"
+      - "--oidc-issuer-url=https://auth.${DOMAIN}/realms/local"
       - "--email-domain=*"
       - "--http-address=0.0.0.0:4180"
       - "--cookie-domain=.${DOMAIN}"
+    networks: [edge]
+    restart: unless-stopped
+
+  cloudflared-node:
+    build: ./cloudflared
+    command: tunnel --no-autoupdate --protocol http2 run --token-file /var/lib/nsl/node-tunnel-token
+    volumes:
+      - node_identity:/var/lib/nsl:ro
+      - ${CORPORATE_CA_FILE:-./cloudflared/ca-bundle.empty.pem}:/etc/cloudflared/ca-bundle.pem:ro
     depends_on:
-      - keycloak
-    networks:
-      - edge
+      node-init:
+        condition: service_completed_successfully
+      traefik:
+        condition: service_healthy
+    networks: [edge]
+    restart: unless-stopped
+
+  cloudflared-portal:
+    build: ./cloudflared
+    command: tunnel --no-autoupdate --protocol http2 run --token-file /var/lib/nsl/portal-tunnel-token
+    volumes:
+      - node_identity:/var/lib/nsl:ro
+      - ${CORPORATE_CA_FILE:-./cloudflared/ca-bundle.empty.pem}:/etc/cloudflared/ca-bundle.pem:ro
+    depends_on:
+      node-init:
+        condition: service_completed_successfully
+      traefik:
+        condition: service_healthy
+    networks: [edge]
+    restart: unless-stopped
+
+  auth-guard:
+    image: alpine:3.20
+    profiles: ["auth"]
+    command: ["wget", "-q", "-O", "/dev/null", "http://registry:7272/api/v2/auth-ready"]
+    depends_on:
+      registry:
+        condition: service_healthy
+    networks: [edge]
+    restart: "no"
+
+  postgres:
+    image: postgres:16-alpine
+    profiles: ["auth"]
+    env_file: ./postgres/.env
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./postgres/init:/docker-entrypoint-initdb.d:ro
+    networks: [internal]
+    depends_on:
+      auth-guard:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER}"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    restart: unless-stopped
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:latest
+    profiles: ["auth"]
+    env_file: ./keycloak/.env
+    environment:
+      KC_HOSTNAME: https://auth.${DOMAIN}
+      KC_HOSTNAME_STRICT: "true"
+      KC_HTTP_ENABLED: "true"
+      KC_PROXY_HEADERS: xforwarded
+      KC_HEALTH_ENABLED: "true"
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-}
+    command: start --import-realm
+    volumes:
+      - keycloak_import:/opt/keycloak/data/import:ro
+    networks: [edge, internal]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      auth-guard:
+        condition: service_completed_successfully
+      keycloak-config-gen:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  backup:
+    build:
+      context: ./backup
+      secrets: [corp_ca]
+    env_file: ./backup/.env
+    volumes:
+      - backup_data:/backups
+      - node_identity:/var/lib/nsl:ro
+      - ${BACKUP_TARGETS_FILE_HOST:-./backup/targets.empty.json}:/etc/nsl/backup-targets.json:ro
+    networks: [internal]
     restart: unless-stopped
 
 volumes:
-  terminal_data:
+  node_identity:
+  traefik_dynamic:
+  keycloak_import:
   postgres_data:
   backup_data:
 
 networks:
   edge:
   internal:
+
+secrets:
+  corp_ca:
+    file: ${CORPORATE_CA_FILE:-./cloudflared/ca-bundle.empty.pem}

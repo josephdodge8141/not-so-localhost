@@ -46,7 +46,8 @@ func (d *PostgresDumper) Restore(ctx context.Context, info DBInfo, r io.Reader, 
 		"-U", d.AdminUser,
 		"-h", info.Host,
 		"-p", port,
-		"-c", `DROP DATABASE IF EXISTS "`+info.Name+`"`,
+		"-v", "ON_ERROR_STOP=1",
+		"-c", `DROP DATABASE IF EXISTS "`+info.Name+`" WITH (FORCE)`,
 		"-c", `CREATE DATABASE "`+info.Name+`" OWNER "`+owner+`"`,
 	)
 	dropCreate.Env = append(os.Environ(), "PGPASSWORD="+adminPassword)
@@ -60,6 +61,7 @@ func (d *PostgresDumper) Restore(ctx context.Context, info DBInfo, r io.Reader, 
 		"-d", info.Name,
 		"-h", info.Host,
 		"-p", port,
+		"-v", "ON_ERROR_STOP=1",
 	)
 	restore.Env = append(os.Environ(), "PGPASSWORD="+info.Password)
 	restore.Stdin = r

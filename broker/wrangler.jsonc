@@ -1,0 +1,20 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "nsl-enrollment-broker",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-08-28",
+  "vars": {
+    "DOMAIN": "joedodge.dev",
+    "CLOUDFLARE_ACCOUNT_ID": "40d89a7cbd170ae08962cc3852fa65cd",
+    "CLOUDFLARE_ZONE_ID": "5988a45ab119c67ce6fdf0b6b65d5635"
+  },
+  "durable_objects": {
+    "bindings": [
+      { "name": "BROKER", "class_name": "EnrollmentBroker" }
+    ]
+  },
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["EnrollmentBroker"] }
+  ],
+  "observability": { "enabled": true }
+}

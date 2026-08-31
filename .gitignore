@@ -4,8 +4,12 @@ cloudflared/*.json
 cloudflared/config.yml
 */node_modules/
 registry/registry
+node-init/node-init
 cloudflared/cert.pem
 cloudflared/ca-bundle.pem
 traefik/dynamic/infra.yml
 traefik/dynamic/managed.yml
 .serena/
+.opencode/
+.broker-secrets.env
+*.pre-distributed-*

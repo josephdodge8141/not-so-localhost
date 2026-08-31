@@ -1,0 +1,12 @@
+[
+  {
+    "id": "litellm",
+    "label": "LiteLLM",
+    "type": "postgres",
+    "name": "litellm",
+    "user": "litellm",
+    "password_env": "LITELLM_DB_PASSWORD",
+    "host": "host.docker.internal",
+    "port": 5432
+  }
+]

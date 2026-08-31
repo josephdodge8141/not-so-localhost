@@ -1,0 +1,28 @@
+{
+  "realm": "local",
+  "enabled": true,
+  "clients": [
+    {
+      "clientId": "registry",
+      "name": "NSL Registry",
+      "enabled": true,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "${OAUTH2_CLIENT_SECRET_REGISTRY}",
+      "redirectUris": ["https://apps.${DOMAIN}/oauth2/callback"],
+      "webOrigins": ["https://apps.${DOMAIN}"],
+      "publicClient": false,
+      "standardFlowEnabled": true
+    }
+  ],
+  "users": [
+    {
+      "username": "joe",
+      "enabled": true,
+      "emailVerified": true,
+      "email": "joe@${DOMAIN}",
+      "credentials": [
+        {"type": "password", "value": "${KEYCLOAK_USER_PASSWORD}", "temporary": false}
+      ]
+    }
+  ]
+}

@@ -13,11 +13,16 @@ http:
           - "X-Forwarded-User"
           - "X-Forwarded-Email"
           - "X-Forwarded-Preferred-Username"
+          - "X-Forwarded-Groups"
+
+    authz-check:
+      forwardAuth:
+        address: "http://authz:4181"
 
     auth-error:
       errors:
         status:
-          - "401-403"
+          - "401"
         service: oauth2-proxy-signin
         query: "/oauth2/sign_in?rd={url}"
 
@@ -58,6 +63,7 @@ http:
         - web
       middlewares:
         - auth
+        - authz-check
       service: ttyd
 
   services:

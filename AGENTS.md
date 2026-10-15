@@ -105,7 +105,7 @@ cd ../node-init && go test -race ./...
 cd ../backup && go test -race ./... && go vet ./...
 cd ../broker && npm run typecheck && npm test && npm run deploy:dry
 docker compose --env-file .env.example config --quiet
-docker compose --env-file .env.example build node-init registry backup cloudflared-node
+docker compose --env-file .env.example build node-init registry backup cloudflared-node authz
 ```
 
 ## Skills

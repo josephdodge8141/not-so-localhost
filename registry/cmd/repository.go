@@ -383,8 +383,8 @@ func buildApp(state RegistryState, id string, generation uint64, createdAt, upda
 	return App{
 		ID: id, NodeID: input.NodeID, Generation: generation, Name: name, Slug: slug,
 		Description: strings.TrimSpace(input.Description), TargetURL: target.String(),
-		PublicURL: "https://" + hostname, Routes: routes, Enabled: enabled,
-		CreatedAt: createdAt, UpdatedAt: updatedAt,
+		PublicURL: "https://" + hostname, Routes: routes, Grant: normalizeGrant(input.Grant),
+		Enabled: enabled, CreatedAt: createdAt, UpdatedAt: updatedAt,
 	}, nil
 }
 

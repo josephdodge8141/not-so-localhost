@@ -136,9 +136,18 @@ services:
     command:
       - "--provider=keycloak-oidc"
       - "--oidc-issuer-url=https://auth.${DOMAIN}/realms/local"
+      - "--oidc-groups-claim=groups"
       - "--email-domain=*"
       - "--http-address=0.0.0.0:4180"
       - "--cookie-domain=.${DOMAIN}"
+    networks: [edge]
+    restart: unless-stopped
+
+  authz:
+    build: ./authz
+    environment:
+      DOMAIN: ${DOMAIN:?DOMAIN is required}
+      NSL_ADMIN_GROUP: ${NSL_ADMIN_GROUP:-admin}
     networks: [edge]
     restart: unless-stopped
 

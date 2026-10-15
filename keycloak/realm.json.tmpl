@@ -11,8 +11,25 @@
       "redirectUris": ["https://apps.${DOMAIN}/oauth2/callback"],
       "webOrigins": ["https://apps.${DOMAIN}"],
       "publicClient": false,
-      "standardFlowEnabled": true
+      "standardFlowEnabled": true,
+      "protocolMappers": [
+        {
+          "name": "groups",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-group-membership-mapper",
+          "config": {
+            "claim.name": "groups",
+            "full.path": "false",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true"
+          }
+        }
+      ]
     }
+  ],
+  "groups": [
+    {"name": "admin"}
   ],
   "users": [
     {
@@ -20,6 +37,7 @@
       "enabled": true,
       "emailVerified": true,
       "email": "joe@${DOMAIN}",
+      "groups": ["admin"],
       "credentials": [
         {"type": "password", "value": "${KEYCLOAK_USER_PASSWORD}", "temporary": false}
       ]

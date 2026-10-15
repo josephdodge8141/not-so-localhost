@@ -1,7 +1,10 @@
 // Package main runs the distributed Not-So-Localhost app registry.
 package main
 
-import "time"
+import (
+	"strings"
+	"time"
+)
 
 const stateSchemaVersion = 1
 
@@ -33,6 +36,14 @@ type Route struct {
 	Auth     AuthPolicy `json:"auth"`
 }
 
+// Grant controls which subjects may access an application.
+// Admins always have access; everyone else needs a match.
+// An empty grant means admin-only.
+type Grant struct {
+	Groups []string `json:"groups,omitempty"`
+	Users  []string `json:"users,omitempty"`
+}
+
 // App is an HTTP service registered to one node.
 type App struct {
 	ID          string    `json:"id"`
@@ -44,6 +55,7 @@ type App struct {
 	TargetURL   string    `json:"target_url"`
 	PublicURL   string    `json:"public_url"`
 	Routes      []Route   `json:"routes"`
+	Grant       Grant     `json:"grant,omitempty"`
 	Enabled     bool      `json:"enabled"`
 	CreatedAt   time.Time `json:"created_at"`
 	UpdatedAt   time.Time `json:"updated_at"`
@@ -63,6 +75,7 @@ type AppInput struct {
 	Description string       `json:"description,omitempty"`
 	TargetURL   string       `json:"target_url"`
 	Routes      []RouteInput `json:"routes,omitempty"`
+	Grant       Grant        `json:"grant,omitempty"`
 	Enabled     *bool        `json:"enabled,omitempty"`
 }
 
@@ -103,4 +116,47 @@ func findApp(apps []App, id string) (App, bool) {
 		}
 	}
 	return App{}, false
+}
+
+// normalizeGrant trims entries and drops empties.
+func normalizeGrant(grant Grant) Grant {
+	clean := func(values []string) []string {
+		kept := make([]string, 0, len(values))
+		for _, value := range values {
+			if trimmed := strings.TrimSpace(value); trimmed != "" {
+				kept = append(kept, trimmed)
+			}
+		}
+		return kept
+	}
+	return Grant{Groups: clean(grant.Groups), Users: clean(grant.Users)}
+}
+
+// canAccess reports whether a caller may see an app.
+// Admins always can; everyone else needs a group or user match.
+func canAccess(app App, user string, groups []string, isAdmin bool) bool {
+	if isAdmin {
+		return true
+	}
+	for _, allowed := range app.Grant.Users {
+		if allowed == user {
+			return true
+		}
+	}
+	for _, member := range groups {
+		for _, allowed := range app.Grant.Groups {
+			if allowed == member {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// filterAppsByGrant returns only the apps visible to the caller.
+func filterAppsByGrant(apps []App, user string, groups []string, isAdmin bool) []App {
+	if isAdmin {
+		return apps
+	}
+	return filterApps(apps, func(app App) bool { return canAccess(app, user, groups, false) })
 }

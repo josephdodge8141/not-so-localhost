@@ -120,3 +120,42 @@ type unavailableStore struct{ ObjectStore }
 func (unavailableStore) Get(context.Context, string) (StoredObject, error) {
 	return StoredObject{}, errors.New("offline")
 }
+
+func TestAuthOwnerTransfer(t *testing.T) {
+	ctx := context.Background()
+	store := NewMemoryObjectStore()
+	repo := NewRepository(store, "transfer")
+	for _, id := range []string{"source", "destination"} {
+		if err := repo.RegisterNode(ctx, NodeIdentity{ID: id, Name: id, Slug: id, CreatedAt: time.Now()}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := repo.ClaimAuthOwner(ctx, "source"); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("NSL_AUTH_CLAIM_TOKEN", "operator-secret")
+	s := &Server{repo: repo, apiToken: "node-secret"}
+	mux := http.NewServeMux()
+	s.routes(mux)
+	for _, tc := range []struct {
+		expected, destination, claim string
+		want                         int
+	}{
+		{"source", "destination", "", 401}, {"stale", "destination", "operator-secret", 409},
+		{"source", "missing", "operator-secret", 400}, {"source", "destination", "operator-secret", 204},
+		{"source", "destination", "operator-secret", 204}, {"destination", "source", "operator-secret", 204},
+	} {
+		r := httptest.NewRequest("POST", "/internal/auth-owner", strings.NewReader(`{"expected_owner":"`+tc.expected+`","destination":"`+tc.destination+`"}`))
+		r.Header.Set("Authorization", "Bearer node-secret")
+		r.Header.Set("X-NSL-Auth-Claim", tc.claim)
+		w := httptest.NewRecorder()
+		mux.ServeHTTP(w, r)
+		if w.Code != tc.want {
+			t.Fatalf("transfer: got %d want %d", w.Code, tc.want)
+		}
+	}
+	state, _, err := NewRepository(store, "transfer").Load(ctx)
+	if err != nil || state.AuthOwnerNodeID != "source" {
+		t.Fatalf("rollback: %v %v", state.AuthOwnerNodeID, err)
+	}
+}

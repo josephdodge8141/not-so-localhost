@@ -112,7 +112,7 @@ func renderTraefik(apps []App) []byte {
 			builder.WriteString(fmt.Sprintf("      priority: %d\n", route.Priority))
 			builder.WriteString("      entryPoints:\n        - web\n")
 			if route.Auth == AuthBrowser {
-				builder.WriteString("      middlewares:\n        - auth\n")
+				builder.WriteString("      middlewares:\n        - auth\n        - authz-check\n")
 			}
 			builder.WriteString("      service: " + serviceName + "\n")
 		}

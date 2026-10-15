@@ -33,6 +33,13 @@ type Route struct {
 	Auth     AuthPolicy `json:"auth"`
 }
 
+// Grant controls which subjects may access an application.
+// Admins always have access; everyone else needs a match.
+// An empty grant means admin-only.
+type Grant struct {
+	Users []string `json:"users,omitempty"`
+}
+
 // App is an HTTP service registered to one node.
 type App struct {
 	ID          string    `json:"id"`
@@ -44,6 +51,7 @@ type App struct {
 	TargetURL   string    `json:"target_url"`
 	PublicURL   string    `json:"public_url"`
 	Routes      []Route   `json:"routes"`
+	Grant       Grant     `json:"grant,omitempty"`
 	Enabled     bool      `json:"enabled"`
 	CreatedAt   time.Time `json:"created_at"`
 	UpdatedAt   time.Time `json:"updated_at"`
@@ -63,6 +71,7 @@ type AppInput struct {
 	Description string       `json:"description,omitempty"`
 	TargetURL   string       `json:"target_url"`
 	Routes      []RouteInput `json:"routes,omitempty"`
+	Grant       *Grant       `json:"grant,omitempty"`
 	Enabled     *bool        `json:"enabled,omitempty"`
 }
 
@@ -103,4 +112,19 @@ func findApp(apps []App, id string) (App, bool) {
 		}
 	}
 	return App{}, false
+}
+
+func canAccess(app App, user string, admin bool) bool {
+	if admin {
+		return true
+	}
+	if user == "" {
+		return false
+	}
+	for _, allowed := range app.Grant.Users {
+		if allowed == user {
+			return true
+		}
+	}
+	return false
 }

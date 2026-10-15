@@ -108,21 +108,15 @@ func TestAuthorizationIntegration(t *testing.T) {
 	if res := call("GET", "/internal/authorize?host=assigned--home.example.test", "subject-member", "", "proxy-token", ""); res.StatusCode != 403 {
 		t.Fatal("revocation failed")
 	}
+	s.repo = NewRepository(unavailableStore{}, "test")
+	if res := call("GET", "/internal/authorize?host=assigned--home.example.test", "subject-member", "", "proxy-token", ""); res.StatusCode != 503 {
+		t.Fatalf("outage must fail closed: %d", res.StatusCode)
+	}
+
 }
 
 type unavailableStore struct{ ObjectStore }
 
 func (unavailableStore) Get(context.Context, string) (StoredObject, error) {
 	return StoredObject{}, errors.New("offline")
-}
-func TestAuthorizationOutage(t *testing.T) {
-	s := &Server{repo: NewRepository(unavailableStore{}, "test"), domain: "example.test", proxyToken: "proxy-token"}
-	r := httptest.NewRequest("GET", "/internal/authorize?host=app--home.example.test", nil)
-	r.Header.Set("X-NSL-Proxy-Token", "proxy-token")
-	r.Header.Set("X-Auth-Request-User", "subject-member")
-	w := httptest.NewRecorder()
-	s.authorize(w, r)
-	if w.Code != 503 {
-		t.Fatalf("outage must fail closed: %d", w.Code)
-	}
 }

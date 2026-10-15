@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"html"
 	"io"
+	"net"
 	"net/http"
 	"net/http/cookiejar"
 	"net/http/httptest"
@@ -37,6 +38,11 @@ func TestLiveAuthorization(t *testing.T) {
 	if os.Getenv("NSL_LIVE_TEST") != "1" {
 		t.Skip("opt in on the auth owner with NSL_LIVE_TEST=1; creates and disables named fixtures")
 	}
+	lock, err := net.Listen("tcp", "127.0.0.1:19003")
+	if err != nil {
+		t.Fatal("another live authorization validation is running")
+	}
+	defer lock.Close()
 	must := func(err error) {
 		t.Helper()
 		if err != nil {

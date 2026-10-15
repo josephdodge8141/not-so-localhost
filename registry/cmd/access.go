@@ -4,6 +4,7 @@ package main
 import (
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 )
 
@@ -72,4 +73,24 @@ func (s *Server) authorize(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) terminalHost(host string) bool {
 	return strings.HasPrefix(host, "t--") && strings.HasSuffix(host, "."+s.domain) && strings.Count(host, ".") == strings.Count(s.domain, ".")+1
+}
+
+func (s *Server) transferAuthOwner(w http.ResponseWriter, r *http.Request) {
+	if !s.caller(r).nodeToken || !constantTimeEqual(r.Header.Get("X-NSL-Auth-Claim"), os.Getenv("NSL_AUTH_CLAIM_TOKEN")) {
+		http.Error(w, "operator credentials required", 401)
+		return
+	}
+	var input struct {
+		Expected    string `json:"expected_owner"`
+		Destination string `json:"destination"`
+	}
+	if err := decodeJSON(r, &input); err != nil {
+		http.Error(w, "invalid transfer", 400)
+		return
+	}
+	if err := s.repo.TransferAuthOwner(r.Context(), input.Expected, input.Destination); err != nil {
+		writeMutationError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }

@@ -4,7 +4,7 @@ Implement the destination half of the NSL auth relocation described below. First
 
 ## Starting state and requirements
 
-- Repository: `github.com/josephdodge8141/not-so-localhost`. Authorization repair: PR #20, branch `jdodge/authz-repair`. Relocation support: `jdodge/auth-relocation`, based on that branch. Neither PR may be merged without Joe's approval.
+- Repository: `github.com/josephdodge8141/not-so-localhost`. Authorization repair: PR #20, branch `jdodge/authz-repair`. Relocation support: `jdodge/auth-relocation`, based on that branch. PR #20 was merged by repository automation; keep the remaining draft PRs unmerged without Joe's approval.
 - nice-mac UUID: `d4e24731-4ef1-422a-8317-2a6114e0d2a9`; mbp-m1 UUID: `dda4ab2b-66e6-4ebd-9c27-48ab41c5d51a`. Verify both against the registry rather than assuming.
 - nice-mac hosts Keycloak 26.7.0 and PostgreSQL 16. Login issuer is `https://auth.joedodge.dev/realms/local`; portal is `https://apps.joedodge.dev`.
 - Local authorization acceptance passed on nice-mac: fresh joe admin login, user picker, assigned/unassigned member access, revocation, terminal restrictions, spoof rejection, and app API keys. Auth ownership has NOT moved.

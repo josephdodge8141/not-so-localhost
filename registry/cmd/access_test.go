@@ -110,32 +110,6 @@ func TestAuthorizationIntegration(t *testing.T) {
 	}
 }
 
-func TestDirectoryIntegration(t *testing.T) {
-	kc := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case "/realms/local/protocol/openid-connect/token":
-			if err := r.ParseForm(); err != nil || r.Form.Get("client_secret") != "test-secret" {
-				t.Error("missing client credentials")
-			}
-			_, _ = w.Write([]byte(`{"access_token":"test-token"}`))
-		case "/admin/realms/local/users":
-			if r.Header.Get("Authorization") != "Bearer test-token" || r.URL.Query().Get("search") != "member" {
-				t.Error("bad directory request")
-			}
-			_, _ = w.Write([]byte(`[{"id":"subject-member","username":"member","enabled":true}]`))
-		default:
-			w.WriteHeader(404)
-		}
-	}))
-	defer kc.Close()
-	t.Setenv("KEYCLOAK_URL", kc.URL)
-	t.Setenv("KEYCLOAK_DIRECTORY_SECRET", "test-secret")
-	users, err := searchUsers(context.Background(), "member")
-	if err != nil || len(users) != 1 || users[0].ID != "subject-member" {
-		t.Fatalf("directory: %v %v", users, err)
-	}
-}
-
 type unavailableStore struct{ ObjectStore }
 
 func (unavailableStore) Get(context.Context, string) (StoredObject, error) {

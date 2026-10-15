@@ -290,6 +290,9 @@ func (r *Repository) UpdateApp(ctx context.Context, id string, generation uint64
 					routeIDs[routeIndex] = newID
 				}
 			}
+			if input.Grant == nil {
+				input.Grant = &current.Grant
+			}
 			app, err := buildApp(*state, current.ID, current.Generation+1, current.CreatedAt, now, input, routeIDs, domain)
 			if err != nil {
 				return err
@@ -380,11 +383,15 @@ func buildApp(state RegistryState, id string, generation uint64, createdAt, upda
 	if input.Enabled != nil {
 		enabled = *input.Enabled
 	}
+	grant := Grant{}
+	if input.Grant != nil {
+		grant.Users = append([]string{}, input.Grant.Users...)
+	}
 	return App{
 		ID: id, NodeID: input.NodeID, Generation: generation, Name: name, Slug: slug,
 		Description: strings.TrimSpace(input.Description), TargetURL: target.String(),
-		PublicURL: "https://" + hostname, Routes: routes, Enabled: enabled,
-		CreatedAt: createdAt, UpdatedAt: updatedAt,
+		PublicURL: "https://" + hostname, Routes: routes, Grant: grant,
+		Enabled: enabled, CreatedAt: createdAt, UpdatedAt: updatedAt,
 	}, nil
 }
 
@@ -429,6 +436,7 @@ func cloneState(state RegistryState) RegistryState {
 	for index, app := range state.Apps {
 		clone.Apps[index] = app
 		clone.Apps[index].Routes = append([]Route(nil), app.Routes...)
+		clone.Apps[index].Grant.Users = append([]string(nil), app.Grant.Users...)
 	}
 	return clone
 }

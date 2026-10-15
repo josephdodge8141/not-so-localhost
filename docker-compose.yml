@@ -79,6 +79,8 @@ services:
       DOMAIN: ${DOMAIN:?DOMAIN is required}
       NODE_NAME: ${NODE_NAME:?NODE_NAME is required}
       NODE_IDENTITY_FILE: /var/lib/nsl/node.json
+      KEYCLOAK_URL: https://auth.${DOMAIN}
+      KEYCLOAK_DIRECTORY_SECRET: ${OAUTH2_CLIENT_SECRET_REGISTRY:?OAUTH2_CLIENT_SECRET_REGISTRY is required}
       REGISTRY_S3_BUCKET: ${REGISTRY_S3_BUCKET:?REGISTRY_S3_BUCKET is required}
       REGISTRY_S3_PREFIX: ${REGISTRY_S3_PREFIX:-nsl/registry/v1}
       AWS_REGION: ${AWS_REGION:-us-east-1}
@@ -106,7 +108,7 @@ services:
     restart: unless-stopped
 
   traefik:
-    image: traefik:v3.1
+    image: traefik:v3.1.7
     command: ["--configFile=/etc/traefik/traefik.yml"]
     ports:
       - "127.0.0.1:80:80"
@@ -127,7 +129,7 @@ services:
     restart: unless-stopped
 
   oauth2-proxy:
-    image: quay.io/oauth2-proxy/oauth2-proxy:latest
+    image: quay.io/oauth2-proxy/oauth2-proxy:v7.15.3
     environment:
       OAUTH2_PROXY_CLIENT_ID: registry
       OAUTH2_PROXY_CLIENT_SECRET: ${OAUTH2_CLIENT_SECRET_REGISTRY:?OAUTH2_CLIENT_SECRET_REGISTRY is required}
@@ -136,9 +138,20 @@ services:
     command:
       - "--provider=keycloak-oidc"
       - "--oidc-issuer-url=https://auth.${DOMAIN}/realms/local"
+      - "--oidc-groups-claim=groups"
+      - "--set-xauthrequest=true"
+      - "--reverse-proxy=true"
       - "--email-domain=*"
       - "--http-address=0.0.0.0:4180"
       - "--cookie-domain=.${DOMAIN}"
+    networks: [edge]
+    restart: unless-stopped
+
+  authz:
+    build: ./authz
+    environment:
+      DOMAIN: ${DOMAIN:?DOMAIN is required}
+      REGISTRY_PROXY_TOKEN: ${REGISTRY_PROXY_TOKEN:?REGISTRY_PROXY_TOKEN is required}
     networks: [edge]
     restart: unless-stopped
 
@@ -199,7 +212,7 @@ services:
     restart: unless-stopped
 
   keycloak:
-    image: quay.io/keycloak/keycloak:latest
+    image: quay.io/keycloak/keycloak:26.7.0
     profiles: ["auth"]
     env_file: ./keycloak/.env
     environment:

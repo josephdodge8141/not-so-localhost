@@ -101,12 +101,20 @@ Required Worker secrets: `CLOUDFLARE_API_TOKEN`, `BROKER_ADMIN_TOKEN`, and
 
 ```sh
 cd registry && go test -race ./... && go vet ./...
+cd ../authz && go test -race ./... && go vet ./...
 cd ../node-init && go test -race ./...
 cd ../backup && go test -race ./... && go vet ./...
 cd ../broker && npm run typecheck && npm test && npm run deploy:dry
 docker compose --env-file .env.example config --quiet
-docker compose --env-file .env.example build node-init registry backup cloudflared-node
+docker compose --env-file .env.example build node-init registry backup cloudflared-node authz
 ```
+
+## Authorization
+
+- ForwardAuth uses `X-Auth-Request-*` response headers, not proxy upstream headers.
+- Registry browser identity requires the proxy token; app grants store Keycloak subject IDs.
+- Terminal access is fixed to the `admin` group. API-key routes bypass browser grants.
+- Keep all replicas on compatible authorization code before enabling portal writes.
 
 ## Skills
 

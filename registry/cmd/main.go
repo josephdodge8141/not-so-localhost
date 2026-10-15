@@ -101,6 +101,9 @@ func (s *Server) routes(mux *http.ServeMux) {
 
 	mux.HandleFunc("GET /api/v2/version", apiVersion)
 	mux.HandleFunc("GET /api/v2/node", s.localNode)
+	mux.HandleFunc("GET /api/v2/me", s.callerInfo)
+	mux.HandleFunc("GET /api/v2/users", s.listUsers)
+	mux.HandleFunc("GET /internal/authorize", s.authorize)
 	mux.HandleFunc("GET /api/v2/auth-owner", s.authOwner)
 	mux.HandleFunc("GET /api/v2/auth-ready", s.authReady)
 	mux.HandleFunc("GET /api/v2/nodes", s.listNodes)
@@ -187,6 +190,10 @@ func (s *Server) requireMutationAuth(next http.HandlerFunc) http.HandlerFunc {
 		if proxyTrusted {
 			source = "proxy"
 		}
+		if proxyTrusted && !s.caller(r).admin {
+			http.Error(w, "admin only", http.StatusForbidden)
+			return
+		}
 		next(w, r.WithContext(context.WithValue(r.Context(), mutationSourceKey{}, source)))
 	}
 }
@@ -222,6 +229,7 @@ func (s *Server) listApps(w http.ResponseWriter, r *http.Request) {
 	if nodeID := r.URL.Query().Get("node_id"); nodeID != "" {
 		apps = filterApps(apps, func(app App) bool { return app.NodeID == nodeID })
 	}
+	apps = s.visibleApps(r, apps)
 	writeRevision(w, state.Revision)
 	writeJSON(w, http.StatusOK, apps)
 }
@@ -234,6 +242,10 @@ func (s *Server) getApp(w http.ResponseWriter, r *http.Request) {
 	}
 	app, ok := findApp(state.Apps, r.PathValue("id"))
 	if !ok {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	if len(s.visibleApps(r, []App{app})) == 0 {
 		http.Error(w, "not found", http.StatusNotFound)
 		return
 	}
@@ -365,8 +377,9 @@ func (s *Server) listLegacyApps(w http.ResponseWriter, r *http.Request) {
 		writeStoreError(w, err)
 		return
 	}
-	legacy := make([]legacyApp, len(state.Apps))
-	for index, app := range state.Apps {
+	apps := s.visibleApps(r, state.Apps)
+	legacy := make([]legacyApp, len(apps))
+	for index, app := range apps {
 		legacy[index] = toLegacyApp(app)
 	}
 	writeRevision(w, state.Revision)
@@ -381,6 +394,10 @@ func (s *Server) getLegacyApp(w http.ResponseWriter, r *http.Request) {
 	}
 	app, ok := findApp(state.Apps, r.PathValue("id"))
 	if !ok {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	if len(s.visibleApps(r, []App{app})) == 0 {
 		http.Error(w, "not found", http.StatusNotFound)
 		return
 	}

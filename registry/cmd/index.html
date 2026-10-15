@@ -33,7 +33,10 @@ main{padding:28px clamp(18px,4vw,48px) 60px;max-width:1440px;margin:auto}
     <h1><span>apps</span>.<span id="domain">joedodge.dev</span></h1>
     <div class="subtitle" id="revision">shared registry</div>
   </div>
-  <button class="button primary" onclick="openForm()">Register service</button>
+  <div class="actions">
+    <a class="button hidden" id="keycloak-admin" target="_blank" rel="noreferrer" href="#">Manage users</a>
+    <button class="button primary hidden" id="register-button" onclick="openForm()">Register service</button>
+  </div>
 </header>
 <main id="content"><div class="empty">Loading registry state...</div></main>
 
@@ -54,6 +57,10 @@ main{padding:28px clamp(18px,4vw,48px) 60px;max-width:1440px;margin:auto}
           <option value="litellm">LiteLLM: browser login except /v1</option>
         </select>
       </div>
+      <div id="grant-fields" class="hidden">
+        <div class="field"><label for="user-search">Find users</label><input id="user-search" type="search" oninput="findUsers()" placeholder="Search Keycloak users"></div>
+        <div class="field"><label for="grant-users">Assigned users (none means admin-only)</label><select id="grant-users" multiple size="5"></select></div>
+      </div>
       <div class="form-actions"><button type="button" class="button" onclick="closeForm()">Cancel</button><button class="button primary">Save</button></div>
     </form>
   </div>
@@ -64,8 +71,10 @@ let config = {};
 let nodes = [];
 let apps = [];
 let revision = 0;
+let userSearch = 0;
+let me = {user: '', groups: []};
 
-const esc = value => { const element = document.createElement('span'); element.textContent = value || ''; return element.innerHTML; };
+const esc = value => { const element = document.createElement('span'); element.textContent = value || ''; return element.innerHTML.replaceAll('"', '&quot;').replaceAll("'", '&#39;'); };
 const slug = value => value.trim().toLowerCase().replace(/[^a-z0-9-]+/g,'-').replace(/^-+|-+$/g,'');
 const appETag = app => `"app:${app.id}:${app.generation}"`;
 
@@ -77,15 +86,22 @@ async function request(url, options = {}) {
 
 async function load() {
   try {
-    const [configResponse, nodeResponse, appResponse] = await Promise.all([
-      request('/api/config'), request('/api/v2/nodes'), request('/api/v2/apps')
+    const [configResponse, nodeResponse, appResponse, meResponse] = await Promise.all([
+      request('/api/config'), request('/api/v2/nodes'), request('/api/v2/apps'), request('/api/v2/me')
     ]);
     config = await configResponse.json();
     nodes = await nodeResponse.json();
     apps = await appResponse.json();
+    me = await meResponse.json();
     revision = appResponse.headers.get('X-Registry-Revision') || '0';
     document.getElementById('domain').textContent = config.domain;
-    document.getElementById('revision').textContent = `revision ${revision} | local node ${config.node_name}`;
+    document.getElementById('revision').textContent = `revision ${revision} | local node ${config.node_name} | ${me.user || 'unknown user'}`;
+    if (me.admin) {
+      document.getElementById('register-button').classList.remove('hidden');
+      const adminLink = document.getElementById('keycloak-admin');
+      adminLink.href = `https://auth.${encodeURIComponent(config.domain)}/admin`;
+      adminLink.classList.remove('hidden');
+    }
     render();
   } catch (error) {
     document.getElementById('content').innerHTML = `<div class="empty">Registry unavailable: ${esc(error.message)}</div>`;
@@ -102,7 +118,7 @@ function render() {
     return `<section class="node">
       <div class="node-head"><h2>${esc(node.name)}</h2>${authOwner}<span class="node-id">${esc(node.id)}</span></div>
       <div class="grid">
-        <article class="card terminal"><div class="card-top"><h3>Terminal</h3><span class="pill">TTY</span></div><div class="actions"><a class="button" target="_blank" rel="noreferrer" href="https://t--${encodeURIComponent(node.slug)}.${encodeURIComponent(config.domain)}">Open terminal</a></div></article>
+        ${me.admin ? `<article class="card terminal"><div class="card-top"><h3>Terminal</h3><span class="pill">TTY</span></div><div class="actions"><a class="button" target="_blank" rel="noreferrer" href="https://t--${encodeURIComponent(node.slug)}.${encodeURIComponent(config.domain)}">Open terminal</a></div></article>` : ''}
         ${cards}
       </div>
     </section>`;
@@ -112,14 +128,15 @@ function render() {
 function appCard(app) {
   const split = app.routes.length > 1;
   const policy = split ? 'split' : app.routes[0]?.auth || 'browser';
+  const manage = me.admin ? `<button class="button" onclick="editApp('${app.id}')">Edit</button><button class="button danger" onclick="removeApp('${app.id}')">Delete</button>` : '';
   return `<article class="card">
     <div><div class="card-top"><h3>${esc(app.name)}</h3><span class="pill ${policy === 'upstream' ? 'api' : ''} ${app.enabled ? '' : 'off'}">${app.enabled ? esc(policy) : 'disabled'}</span></div>
     <div class="description">${esc(app.description || 'No description')}</div><div class="target">${esc(app.target_url)}</div></div>
-    <div class="actions"><a class="button primary" target="_blank" rel="noreferrer" href="${esc(app.public_url)}">Open</a><button class="button" onclick="editApp('${app.id}')">Edit</button><button class="button danger" onclick="removeApp('${app.id}')">Delete</button></div>
+    <div class="actions"><a class="button primary" target="_blank" rel="noreferrer" href="${esc(app.public_url)}">Open</a>${manage}</div>
   </article>`;
 }
 
-function openForm(app = null) {
+async function openForm(app = null) {
   document.getElementById('modal').classList.remove('hidden');
   document.getElementById('form').reset();
   document.getElementById('app-id').value = app?.id || '';
@@ -130,6 +147,22 @@ function openForm(app = null) {
   document.getElementById('description').value = app?.description || '';
   document.getElementById('target').value = app?.target_url || '';
   document.getElementById('policy').value = app ? inferPolicy(app) : 'browser';
+  document.getElementById('grant-users').innerHTML = (app?.grant?.users || []).map(id => `<option selected value="${esc(id)}">${esc(id)}</option>`).join('');
+  await findUsers();
+  document.getElementById('grant-fields').classList.toggle('hidden', !me.admin);
+}
+
+async function findUsers() {
+  const sequence = ++userSearch;
+  const select = document.getElementById('grant-users');
+  try {
+    const users = await (await request('/api/v2/users?q=' + encodeURIComponent(document.getElementById('user-search').value))).json();
+    if (sequence !== userSearch) return;
+    const selected = new Set(Array.from(select.selectedOptions, option => option.value));
+    const choices = new Map(Array.from(select.selectedOptions, option => [option.value, option.textContent]));
+    users.filter(user => !user.username.startsWith('service-account-')).forEach(user => choices.set(user.id, user.username));
+    select.innerHTML = Array.from(choices, ([id, name]) => `<option value="${esc(id)}" ${selected.has(id) ? 'selected' : ''}>${esc(name)}</option>`).join('');
+  } catch (error) { toast(error.message, true); }
 }
 
 function closeForm() { document.getElementById('modal').classList.add('hidden'); }
@@ -158,7 +191,10 @@ async function saveApp(event) {
     node_id: nodeId,
     description: document.getElementById('description').value,
     target_url: document.getElementById('target').value,
-    routes: routeInputs(name, nodeId, document.getElementById('policy').value)
+    routes: routeInputs(name, nodeId, document.getElementById('policy').value),
+    grant: {
+      users: Array.from(document.getElementById('grant-users').selectedOptions, option => option.value)
+    }
   };
   try {
     const response = await request(id ? `/api/v2/apps/${id}` : '/api/v2/apps', {

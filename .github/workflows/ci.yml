@@ -8,6 +8,7 @@ permissions:
   statuses: write
 jobs:
   ci-cd:
+    if: ${{ !github.event.pull_request.draft }}
     uses: josephdodge8141/auto-pr/.github/workflows/ci-cd-pipeline.yml@main
     secrets: inherit
     with:

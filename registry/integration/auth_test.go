@@ -199,7 +199,7 @@ func TestLiveAuthorization(t *testing.T) {
 			method, endpoint, want = "PUT", appsURL+"/"+fixture.ID, 200
 			nodeAuth["If-Match"] = fmt.Sprintf(`"app:%s:%d"`, fixture.ID, fixture.Generation)
 		}
-		status, b := call(node, method, endpoint, input, nodeAuth)
+		status, b := call(admin, method, strings.Replace(endpoint, "http://127.0.0.1:7272", portal, 1), input, map[string]string{"Origin": portal, "If-Match": nodeAuth["If-Match"]})
 		check("save fixture", status, want)
 		if json.Unmarshal(b, &fixture) != nil {
 			t.Fatal("invalid fixture")
@@ -228,6 +228,8 @@ func TestLiveAuthorization(t *testing.T) {
 	}
 	status, _ = call(member, "POST", portal+"/api/v2/apps", input, nil)
 	check("member mutation", status, 403)
+	status, _ = call(admin, "POST", portal+"/api/v2/apps", input, map[string]string{"Origin": "https://untrusted.example.test"})
+	check("cross-origin mutation", status, 403)
 	anonymous := client()
 	anonymous.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 	for _, tc := range []struct {

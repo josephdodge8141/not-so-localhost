@@ -190,7 +190,7 @@ func (s *Server) requireMutationAuth(next http.HandlerFunc) http.HandlerFunc {
 		if proxyTrusted {
 			source = "proxy"
 		}
-		if proxyTrusted && !s.caller(r).admin {
+		if proxyTrusted && (!s.caller(r).admin || (r.Header.Get("Origin") != "" && r.Header.Get("Origin") != "https://apps."+s.domain)) {
 			http.Error(w, "admin only", http.StatusForbidden)
 			return
 		}

@@ -34,6 +34,7 @@ main{padding:28px clamp(18px,4vw,48px) 60px;max-width:1440px;margin:auto}
     <div class="subtitle" id="revision">shared registry</div>
   </div>
   <div class="actions">
+    <a class="button hidden" id="logout" href="/oauth2/sign_out">Log out</a>
     <a class="button hidden" id="keycloak-admin" target="_blank" rel="noreferrer" href="#">Manage users</a>
     <button class="button primary hidden" id="register-button" onclick="openForm()">Register service</button>
   </div>
@@ -96,6 +97,8 @@ async function load() {
     revision = appResponse.headers.get('X-Registry-Revision') || '0';
     document.getElementById('domain').textContent = config.domain;
     document.getElementById('revision').textContent = `revision ${revision} | local node ${config.node_name} | ${me.user || 'unknown user'}`;
+    document.getElementById('logout').href = '/oauth2/sign_out?' + new URLSearchParams({rd: `https://auth.${config.domain}/realms/local/protocol/openid-connect/logout`});
+    document.getElementById('logout').classList.remove('hidden');
     if (me.admin) {
       document.getElementById('register-button').classList.remove('hidden');
       const adminLink = document.getElementById('keycloak-admin');

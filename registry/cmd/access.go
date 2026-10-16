@@ -40,7 +40,6 @@ func (s *Server) visibleApps(r *http.Request, apps []App) []App {
 	c := s.caller(r)
 	return filterApps(apps, func(app App) bool { return c.nodeToken || canAccess(app, c.user, c.admin) })
 }
-
 func (s *Server) authorize(w http.ResponseWriter, r *http.Request) {
 	c := s.caller(r)
 	if c.user == "" {
@@ -68,11 +67,9 @@ func (s *Server) authorize(w http.ResponseWriter, r *http.Request) {
 	}
 	http.Error(w, "forbidden", http.StatusForbidden)
 }
-
 func (s *Server) terminalHost(host string) bool {
 	return strings.HasPrefix(host, "t--") && strings.HasSuffix(host, "."+s.domain) && strings.Count(host, ".") == strings.Count(s.domain, ".")+1
 }
-
 func (s *Server) transferAuthOwner(w http.ResponseWriter, r *http.Request) {
 	if !s.caller(r).nodeToken || !constantTimeEqual(r.Header.Get("X-NSL-Auth-Claim"), os.Getenv("NSL_AUTH_CLAIM_TOKEN")) {
 		http.Error(w, "operator credentials required", 401)

@@ -139,6 +139,7 @@ services:
       - "--provider=keycloak-oidc"
       - "--oidc-issuer-url=https://auth.${DOMAIN}/realms/local"
       - "--oidc-groups-claim=groups"
+      - "--insecure-oidc-allow-unverified-email=true"
       - "--set-xauthrequest=true"
       - "--reverse-proxy=true"
       - "--email-domain=*"

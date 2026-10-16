@@ -95,6 +95,7 @@ export class EnrollmentBroker extends DurableObject<Env> {
       if (request.method === "POST" && url.pathname === "/v1/enroll") {
         return await this.enroll(request);
       }
+      if (request.method === "POST" && url.pathname === "/v1/admin/auth-owner") return await this.transferAuth(request);
       const appsSyncMatch = url.pathname.match(/^\/v1\/nodes\/([^/]+)\/apps$/);
       if (request.method === "PUT" && appsSyncMatch) {
         return await this.syncApps(request, appsSyncMatch[1]);
@@ -278,6 +279,27 @@ export class EnrollmentBroker extends DurableObject<Env> {
     await this.configureNodeTunnel(node);
     for (const hostname of desired.values()) await this.ensureDNS(hostname, node.tunnel_id);
     return this.json({ node_id: node.node_id, node_name: node.node_name, apps: [...desired.keys()].sort(), status: "ready" });
+  }
+
+  private async transferAuth(request: Request): Promise<Response> {
+    if (!await this.bearerMatches(request, this.env.BROKER_ADMIN_TOKEN)) return this.error(401, "unauthorized", "operator authentication required");
+    const body = await this.body(request) as { expected_owner?: string; destination?: string };
+    if (!body.expected_owner || !body.destination) return this.error(400, "invalid_transfer", "both node IDs are required");
+    const owner = this.first<NodeRow>("SELECT * FROM nodes WHERE auth_owner = 1");
+    const source = this.first<NodeRow>("SELECT * FROM nodes WHERE node_id = ?", body.expected_owner);
+    const destination = this.first<NodeRow>("SELECT * FROM nodes WHERE node_id = ?", body.destination);
+    if (!source || !destination || !owner || ![source.node_id, destination.node_id].includes(owner.node_id)) return this.error(409, "owner_conflict", "expected owner or destination does not match");
+    const hostname = `auth.${this.env.DOMAIN}`;
+    const records = await this.cloudflare<Array<{ id: string; type: string; content: string; comment?: string }>>(`/zones/${this.env.CLOUDFLARE_ZONE_ID}/dns_records?name=${encodeURIComponent(hostname)}`);
+    if (records.length !== 1 || records[0].type !== "CNAME" || records[0].comment !== "managed-by=nsl-broker" || ![source.tunnel_id, destination.tunnel_id].some(id => records[0].content === `${id}.cfargotunnel.com`)) return this.error(409, "dns_conflict", "auth DNS is not managed by either node");
+    this.ctx.storage.transactionSync(() => {
+      this.ctx.storage.sql.exec("UPDATE nodes SET auth_owner = 0 WHERE auth_owner = 1");
+      this.ctx.storage.sql.exec("UPDATE nodes SET auth_owner = 1 WHERE node_id = ?", destination.node_id);
+    });
+    await this.configureNodeTunnel(source);
+    await this.configureNodeTunnel(destination);
+    await this.adoptExactDNS(hostname, destination.tunnel_id);
+    return this.json({ node_id: destination.node_id, status: "ready" });
   }
 
 	private async provisionAuth(request: Request, rawNode: string): Promise<Response> {

@@ -104,6 +104,7 @@ func (s *Server) routes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v2/me", s.callerInfo)
 	mux.HandleFunc("GET /api/v2/users", s.listUsers)
 	mux.HandleFunc("GET /internal/authorize", s.authorize)
+	mux.HandleFunc("POST /internal/auth-owner", s.transferAuthOwner)
 	mux.HandleFunc("GET /api/v2/auth-owner", s.authOwner)
 	mux.HandleFunc("GET /api/v2/auth-ready", s.authReady)
 	mux.HandleFunc("GET /api/v2/nodes", s.listNodes)

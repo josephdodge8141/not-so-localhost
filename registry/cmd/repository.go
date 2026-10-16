@@ -263,6 +263,33 @@ func (r *Repository) CreateApp(ctx context.Context, input AppInput, domain strin
 	return created, state.Revision, err
 }
 
+// TransferAuthOwner moves the auth role using an expected owner precondition.
+func (r *Repository) TransferAuthOwner(ctx context.Context, expected, destination string) error {
+	_, err := r.mutate(ctx, func(state *RegistryState) error {
+		if expected == "" || destination == "" {
+			return ErrValidation
+		}
+		if _, ok := findNode(state.Nodes, destination); !ok {
+			return ErrValidation
+		}
+		if state.AuthOwnerNodeID == destination {
+			return ErrNoChange
+		}
+		if state.AuthOwnerNodeID != expected {
+			return ErrConflict
+		}
+		state.AuthOwnerNodeID = destination
+		for i := range state.Nodes {
+			state.Nodes[i].Roles = removeString(state.Nodes[i].Roles, "auth")
+			if state.Nodes[i].ID == destination {
+				state.Nodes[i].Roles = append(state.Nodes[i].Roles, "auth")
+			}
+		}
+		return nil
+	})
+	return err
+}
+
 // UpdateApp replaces an application when its generation still matches.
 func (r *Repository) UpdateApp(ctx context.Context, id string, generation uint64, input AppInput, domain string) (App, uint64, error) {
 	now := r.now()

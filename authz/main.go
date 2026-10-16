@@ -2,12 +2,14 @@
 package main
 
 import (
+	"html"
 	"io"
 	"log"
 	"net"
 	"net/http"
 	"net/url"
 	"os"
+	"strings"
 	"time"
 )
 
@@ -21,6 +23,17 @@ func main() {
 		host := r.Header.Get("X-Forwarded-Host")
 		if h, _, err := net.SplitHostPort(host); err == nil {
 			host = h
+		}
+		if r.URL.Path == "/oauth2/sign_in" {
+			target, err := url.ParseRequestURI(r.URL.Query().Get("rd"))
+			if err != nil || target.IsAbs() || target.Host != "" || !strings.HasSuffix(host, "."+os.Getenv("DOMAIN")) {
+				http.Error(w, "invalid return URL", http.StatusBadRequest)
+				return
+			}
+			target.Scheme, target.Host = "https", host
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			_, _ = io.WriteString(w, `<!doctype html><html><title>Sign in</title><body style="font:18px system-ui;background:#09111f;color:white;display:grid;place-items:center;min-height:90vh"><form action="https://apps.`+html.EscapeString(os.Getenv("DOMAIN"))+`/oauth2/start" method="get"><input type="hidden" name="rd" value="`+html.EscapeString(target.String())+`"><button style="font:inherit;padding:12px 24px">Sign in with Keycloak</button></form></body></html>`)
+			return
 		}
 		req, err := http.NewRequestWithContext(r.Context(), "GET", "http://registry:7272/internal/authorize?host="+url.QueryEscape(host), nil)
 		if err != nil {

@@ -145,6 +145,7 @@ services:
       - "--email-domain=*"
       - "--http-address=0.0.0.0:4180"
       - "--cookie-domain=.${DOMAIN}"
+      - "--whitelist-domain=.${DOMAIN}"
     networks: [edge]
     restart: unless-stopped
 

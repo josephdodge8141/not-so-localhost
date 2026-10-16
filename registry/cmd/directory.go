@@ -32,7 +32,6 @@ func (s *Server) listUsers(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	writeJSON(w, http.StatusOK, users)
 }
-
 func searchUsers(ctx context.Context, query string) ([]directoryUser, error) {
 	base := strings.TrimRight(os.Getenv("KEYCLOAK_URL"), "/")
 	secret := os.Getenv("KEYCLOAK_DIRECTORY_SECRET")

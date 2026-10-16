@@ -27,7 +27,6 @@ func (s *Server) caller(r *http.Request) caller {
 	}
 	return c
 }
-
 func (s *Server) callerInfo(w http.ResponseWriter, r *http.Request) {
 	c := s.caller(r)
 	if c.user == "" {
@@ -37,7 +36,6 @@ func (s *Server) callerInfo(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	writeJSON(w, http.StatusOK, map[string]any{"id": c.user, "user": c.name, "admin": c.admin})
 }
-
 func (s *Server) visibleApps(r *http.Request, apps []App) []App {
 	c := s.caller(r)
 	return filterApps(apps, func(app App) bool { return c.nodeToken || canAccess(app, c.user, c.admin) })

@@ -59,7 +59,7 @@ main{padding:28px clamp(18px,4vw,48px) 60px;max-width:1440px;margin:auto}
       </div>
       <div id="grant-fields" class="hidden">
         <div class="field"><label for="user-search">Find users</label><input id="user-search" type="search" oninput="findUsers()" placeholder="Search Keycloak users"></div>
-        <div class="field"><label for="grant-users">Assigned users (none means admin-only)</label><select id="grant-users" multiple size="5"></select></div>
+        <div class="field"><label id="grant-users-label">Assigned users (none means admin-only)</label><div id="grant-users" style="max-height:180px;overflow:auto;border:1px solid var(--line);border-radius:7px;padding:8px" role="group" aria-labelledby="grant-users-label"></div></div>
       </div>
       <div class="form-actions"><button type="button" class="button" onclick="closeForm()">Cancel</button><button class="button primary">Save</button></div>
     </form>
@@ -147,7 +147,7 @@ async function openForm(app = null) {
   document.getElementById('description').value = app?.description || '';
   document.getElementById('target').value = app?.target_url || '';
   document.getElementById('policy').value = app ? inferPolicy(app) : 'browser';
-  document.getElementById('grant-users').innerHTML = (app?.grant?.users || []).map(id => `<option selected value="${esc(id)}">${esc(id)}</option>`).join('');
+  document.getElementById('grant-users').innerHTML = (app?.grant?.users || []).map(id => `<label style="display:flex;align-items:center;gap:8px;padding:5px;cursor:pointer"><input style="width:auto;accent-color:var(--blue)" type="checkbox" checked value="${esc(id)}"> ${esc(id)}</label>`).join('');
   await findUsers();
   document.getElementById('grant-fields').classList.toggle('hidden', !me.admin);
 }
@@ -158,10 +158,10 @@ async function findUsers() {
   try {
     const users = await (await request('/api/v2/users?q=' + encodeURIComponent(document.getElementById('user-search').value))).json();
     if (sequence !== userSearch) return;
-    const selected = new Set(Array.from(select.selectedOptions, option => option.value));
-    const choices = new Map(Array.from(select.selectedOptions, option => [option.value, option.textContent]));
+    const selected = new Set(Array.from(select.querySelectorAll('input:checked'), input => input.value));
+    const choices = new Map(Array.from(select.querySelectorAll('input:checked'), input => [input.value, input.parentElement.textContent.trim()]));
     users.filter(user => !user.username.startsWith('service-account-')).forEach(user => choices.set(user.id, user.username));
-    select.innerHTML = Array.from(choices, ([id, name]) => `<option value="${esc(id)}" ${selected.has(id) ? 'selected' : ''}>${esc(name)}</option>`).join('');
+    select.innerHTML = Array.from(choices, ([id, name]) => `<label style="display:flex;align-items:center;gap:8px;padding:5px;cursor:pointer"><input style="width:auto;accent-color:var(--blue)" type="checkbox" value="${esc(id)}" ${selected.has(id) ? 'checked' : ''}> ${esc(name)}</label>`).join('');
   } catch (error) { toast(error.message, true); }
 }
 
@@ -193,7 +193,7 @@ async function saveApp(event) {
     target_url: document.getElementById('target').value,
     routes: routeInputs(name, nodeId, document.getElementById('policy').value),
     grant: {
-      users: Array.from(document.getElementById('grant-users').selectedOptions, option => option.value)
+      users: Array.from(document.querySelectorAll('#grant-users input:checked'), input => input.value)
     }
   };
   try {

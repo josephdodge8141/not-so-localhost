@@ -30,6 +30,10 @@ services:
         printf '%s\n' "$${NSL_TERMINAL_URL}" | grep -Eq '^https?://[A-Za-z0-9.-]+:[0-9]+/?$$'
         test "$$(printf '%s\n' "$${NSL_TERMINAL_AUTHORIZATION}" | wc -l)" -eq 1
         printf '%s\n' "$${NSL_TERMINAL_AUTHORIZATION}" | grep -Eq '^(Basic [A-Za-z0-9+/]+=*)?$$'
+        terminal_port="$${NSL_TERMINAL_URL##*:}"
+        terminal_port="$${terminal_port%/}"
+        test "$${terminal_port}" -ge 1
+        test "$${terminal_port}" -le 65535
         envsubst '$${DOMAIN} $${NODE_SLUG} $${REGISTRY_PROXY_TOKEN} $${NSL_TERMINAL_URL} $${NSL_TERMINAL_AUTHORIZATION}' < /templates/infra.yml.tmpl > "$${tmp}"
         test -s "$${tmp}"
         mv "$${tmp}" /output/infra.yml

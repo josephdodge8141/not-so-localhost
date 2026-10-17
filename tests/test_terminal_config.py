@@ -10,8 +10,8 @@ import textwrap
 import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
-DOCKER = shutil.which("docker")
-if DOCKER is None:
+DOCKER = shutil.which("docker") or ""
+if not DOCKER:
     raise RuntimeError("Docker is required")
 
 

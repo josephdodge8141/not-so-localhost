@@ -15,10 +15,10 @@ if DOCKER is None:
     raise RuntimeError("Docker is required")
 
 
-def docker(arguments, timeout=30, **kwargs):
+def docker(arguments, timeout=30, check=True, **kwargs):
     """Run fixed Docker argv without a shell or production configuration."""
     return subprocess.run(  # nosec B603
-        [DOCKER, *arguments], check=True, timeout=timeout, **kwargs
+        [DOCKER, *arguments], check=check, timeout=timeout, **kwargs
     )
 
 
@@ -28,6 +28,13 @@ class TerminalConfiguration(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.image = "nsl-config-test:" + secrets.token_hex(6)
+        cls.addClassCleanup(
+            docker,
+            ["image", "rm", cls.image],
+            check=False,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
         compose = (ROOT / "docker-compose.yml").read_text()
         block = compose.split("  config-gen:\n", 1)[1]
         block = block.split("      - |\n", 1)[1].split("    environment:\n", 1)[0]
@@ -38,19 +45,18 @@ class TerminalConfiguration(unittest.TestCase):
             stdout=subprocess.DEVNULL,
         )
 
-    @classmethod
-    def tearDownClass(cls):
-        docker(["image", "rm", cls.image], stdout=subprocess.DEVNULL)
-
     def setUp(self):
         self.output = tempfile.TemporaryDirectory()
         self.addCleanup(self.output.cleanup)
         self.rendered = pathlib.Path(self.output.name) / "infra.yml"
 
     def render(self, url, header):
+        container = "nsl-config-test-" + secrets.token_hex(6)
         arguments = [
             "run",
             "--rm",
+            "--name",
+            container,
             "--network",
             "none",
             "--user",
@@ -73,6 +79,13 @@ class TerminalConfiguration(unittest.TestCase):
             docker(arguments + [self.image] + self.command, capture_output=True)
         except subprocess.CalledProcessError:
             return False
+        finally:
+            docker(
+                ["rm", "-f", container],
+                check=False,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
         return True
 
     def test_default_and_protected_target(self):

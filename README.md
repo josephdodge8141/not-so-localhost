@@ -313,3 +313,13 @@ works, and real member access is forbidden. WSL addresses are not durable:
 resolve and validate the target before each startup, regenerate config when it
 changes and keep the terminal stopped if the target cannot be verified. This
 option does not install a persistent ttyd service or promise reboot recovery.
+
+Run the terminal config integration checks from a clean checkout with Docker:
+
+```sh
+python3 tests/test_terminal_config.py
+```
+
+The checks build a uniquely tagged config-generator image, use only temporary
+dummy settings, test rendering/rejection, and clean up their own containers and
+image. Operator environment files and enrollment are not required.

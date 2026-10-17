@@ -292,3 +292,24 @@ after `/api/v2/auth-owner` confirms local ownership.
 Moving auth is intentionally manual: stop and fence the old node, back up and
 restore Keycloak PostgreSQL, change the recorded owner through a controlled
 administrative migration, and then repoint the broker-managed auth hostname.
+
+## Optional terminal upstream
+
+The terminal service defaults to `http://host.docker.internal:7681`. For WSL or
+another host topology, set `NSL_TERMINAL_URL` to a measured reachable private
+HTTP(S) host and port. URL credentials/paths are not accepted. Set the optional
+`NSL_TERMINAL_AUTHORIZATION` to a node-local Basic credential in ignored mode-0600
+`.env` when the backend requires it. Config generation rejects malformed values.
+The terminal-only header middleware overwrites incoming Authorization AFTER
+`auth` and `authz-check`; it does not replace public user access checks. An empty
+value strips incoming Authorization while preserving the default Mac endpoint.
+Never place backend credentials in tracked YAML, URL userinfo or logs.
+
+Bind ttyd to the narrowest reachable interface, use a strong random backend
+credential, and suppress ttyd credential-bearing NOTICE startup logging (`-d 3`
+for error/warn only). Before a writable terminal is used, test direct HTTP and
+WebSocket requests without credentials are denied, intended public user access
+works, and real member access is forbidden. WSL addresses are not durable:
+resolve and validate the target before each startup, regenerate config when it
+changes and keep the terminal stopped if the target cannot be verified. This
+option does not install a persistent ttyd service or promise reboot recovery.

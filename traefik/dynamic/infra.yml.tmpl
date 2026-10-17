@@ -45,6 +45,11 @@ http:
         customRequestHeaders:
           X-NSL-Proxy-Token: "${REGISTRY_PROXY_TOKEN}"
 
+    terminal-backend:
+      headers:
+        customRequestHeaders:
+          Authorization: "${NSL_TERMINAL_AUTHORIZATION}"
+
   routers:
     oauth2-callback:
       rule: "PathPrefix(`/oauth2`)"
@@ -78,6 +83,7 @@ http:
       middlewares:
         - auth
         - authz-check
+        - terminal-backend
       service: ttyd
 
   services:
@@ -94,7 +100,7 @@ http:
     ttyd:
       loadBalancer:
         servers:
-          - url: "http://host.docker.internal:7681"
+          - url: "${NSL_TERMINAL_URL}"
 
     oauth2-proxy:
       loadBalancer:

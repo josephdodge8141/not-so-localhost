@@ -26,13 +26,19 @@ services:
         test -n "$${NODE_SLUG}"
         export NODE_SLUG
         tmp="$$(mktemp /output/.infra.yml.XXXXXX)"
-        envsubst '$${DOMAIN} $${NODE_SLUG} $${REGISTRY_PROXY_TOKEN}' < /templates/infra.yml.tmpl > "$${tmp}"
+        test "$$(printf '%s\n' "$${NSL_TERMINAL_URL}" | wc -l)" -eq 1
+        printf '%s\n' "$${NSL_TERMINAL_URL}" | grep -Eq '^https?://[A-Za-z0-9.-]+:[0-9]+/?$$'
+        test "$$(printf '%s\n' "$${NSL_TERMINAL_AUTHORIZATION}" | wc -l)" -eq 1
+        printf '%s\n' "$${NSL_TERMINAL_AUTHORIZATION}" | grep -Eq '^(Basic [A-Za-z0-9+/]+=*)?$$'
+        envsubst '$${DOMAIN} $${NODE_SLUG} $${REGISTRY_PROXY_TOKEN} $${NSL_TERMINAL_URL} $${NSL_TERMINAL_AUTHORIZATION}' < /templates/infra.yml.tmpl > "$${tmp}"
         test -s "$${tmp}"
         mv "$${tmp}" /output/infra.yml
     environment:
       DOMAIN: ${DOMAIN:?DOMAIN is required}
       NODE_NAME: ${NODE_NAME:?NODE_NAME is required}
       REGISTRY_PROXY_TOKEN: ${REGISTRY_PROXY_TOKEN:?REGISTRY_PROXY_TOKEN is required}
+      NSL_TERMINAL_URL: ${NSL_TERMINAL_URL:-http://host.docker.internal:7681}
+      NSL_TERMINAL_AUTHORIZATION: ${NSL_TERMINAL_AUTHORIZATION:-}
     volumes:
       - ./traefik/dynamic/infra.yml.tmpl:/templates/infra.yml.tmpl:ro
       - traefik_dynamic:/output
